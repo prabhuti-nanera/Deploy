@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CRC.Common", "CRC.Common\CR
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CRC.WebPortal.Shared", "CRC.WebPortal.Shared\CRC.WebPortal.Shared.csproj", "{8E77F353-6D8C-A531-083D-B241CC710D16}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorldWebApp", "..\..\..\..\Documents\Deploy\CRC-System-crc-web-portal\CRC.WebPortal\HelloWorldWebApp\HelloWorldWebApp.csproj", "{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,18 @@ Global
 		{8E77F353-6D8C-A531-083D-B241CC710D16}.Release|x64.Build.0 = Release|Any CPU
 		{8E77F353-6D8C-A531-083D-B241CC710D16}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E77F353-6D8C-A531-083D-B241CC710D16}.Release|x86.Build.0 = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|x64.Build.0 = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Debug|x86.Build.0 = Debug|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|x64.ActiveCfg = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|x64.Build.0 = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|x86.ActiveCfg = Release|Any CPU
+		{F88BB81E-22E1-B42C-9329-4EEEF3DDFBB7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

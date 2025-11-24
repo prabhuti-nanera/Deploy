@@ -29,10 +29,4 @@
     <ProjectReference Include="..\CRC.WebPortal.Shared\CRC.WebPortal.Shared.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="wwwroot\web.config">
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>
