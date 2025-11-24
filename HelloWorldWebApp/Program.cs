@@ -1,3 +1,5 @@
+using System.Net;
+
 var builder = WebApplication.CreateBuilder(args);
 
 var app = builder.Build();
@@ -5,10 +7,9 @@ var app = builder.Build();
 // Simple health endpoint for Azure monitoring
 app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
 
-// Root endpoint serving a small HTML page
-app.MapGet("/", () =>
-{
-    const string html = """
+// Primary endpoint served at /api/hello. In Azure/IIS the root request is
+// rewritten to this route by web.config so we can verify the rewrite logic.
+const string HtmlTemplate = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -48,12 +49,37 @@ app.MapGet("/", () =>
         <main class="card">
             <h1> CRC Hello World</h1>
             <p>Your Azure deployment pipeline is working!</p>
+            <p><strong>Environment:</strong> {{ENVIRONMENT}}</p>
+            <p><strong>Message from web.config:</strong> {{MESSAGE}}</p>
         </main>
     </body>
     </html>
     """;
+app.MapGet("/api/hello", () =>
+{
+    var message = Environment.GetEnvironmentVariable("HELLOWORLD_MESSAGE")
+                  ?? "Welcome to the local developer build.";
+
+    var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                  ?? "Unknown";
+
+    var html = HtmlTemplate
+        .Replace("{{ENVIRONMENT}}", WebUtility.HtmlEncode(envName))
+        .Replace("{{MESSAGE}}", WebUtility.HtmlEncode(message));
+
     return Results.Content(html, "text/html");
 });
+
+// Prevent browser console noise for missing resources in simple demo host
+app.MapGet("/favicon.ico", () => Results.StatusCode(StatusCodes.Status204NoContent));
+
+app.MapGet(
+    "/.well-known/appspecific/com.chrome.devtools.json",
+    () => Results.Content("{}", "application/json"));
+
+app.MapGet(
+    "/_framework/aspnetcore-browser-refresh.js",
+    () => Results.Content("console.info('Browser refresh disabled.');", "application/javascript"));
 
 app.Run();
 
