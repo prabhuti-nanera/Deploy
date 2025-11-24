@@ -7,51 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <_HelloWorldWebConfig Include="@@XML@@">
-      <Text><![CDATA[<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <handlers>
-      <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
-    </handlers>
-    <aspNetCore processPath="dotnet"
-               arguments=".\HelloWorldWebApp.dll"
-               stdoutLogEnabled="false"
-               stdoutLogFile=".\logs\stdout"
-               hostingModel="InProcess">
-      <environmentVariables>
-        <add name="ASPNETCORE_ENVIRONMENT" value="Production" />
-        <add name="HELLOWORLD_MESSAGE" value="This text came from web.config during publish." />
-        <add name="HELLOWORLD_BASEPATH" value="/api/hello" />
-      </environmentVariables>
-    </aspNetCore>
-    <rewrite>
-      <rules>
-        <rule name="Rewrite root to hello endpoint" stopProcessing="true">
-          <match url="^$" />
-          <action type="Rewrite" url="/api/hello" />
-        </rule>
-      </rules>
-    </rewrite>
-    <httpProtocol>
-      <customHeaders>
-        <add name="Cache-Control" value="no-store, no-cache" />
-        <add name="X-Content-Type-Options" value="nosniff" />
-        <add name="X-XSS-Protection" value="1; mode=block" />
-      </customHeaders>
-    </httpProtocol>
-    <httpErrors errorMode="DetailedLocalOnly" />
-  </system.webServer>
-</configuration>]]></Text>
-    </_HelloWorldWebConfig>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.0-rc.1.25451.107" />
   </ItemGroup>
 
-  <Target Name="GenerateHelloWorldWebConfig" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
-    <Message Importance="High" Text="Writing HelloWorldWebApp web.config into $(PublishDir)" />
-    <WriteLinesToFile File="$(PublishDir)web.config"
-                      Lines="@(_HelloWorldWebConfig->'%(Text)')"
-                      Overwrite="true" />
-  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\CRC.WebPortal.BlazorWebApp\CRC.WebPortal.BlazorWebApp.csproj" />
+  </ItemGroup>
 
 </Project>
 
