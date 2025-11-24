@@ -1,0 +1,188 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+
+<div class="building-manager">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">🏢 Building Configuration</h6>
+        <div>
+            <button type="button" class="btn btn-outline-primary btn-sm me-2" @onclick="AddNewBuilding">
+                <i class="fas fa-plus"></i> Add New
+            </button>
+            @if (Buildings.Any())
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CloneLastBuilding">
+                    <i class="fas fa-copy"></i> Clone
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!Buildings.Any())
+    {
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-building fa-2x mb-2"></i>
+            <p>No buildings configured yet.</p>
+            <small>Click "Add New" to create your first building.</small>
+        </div>
+    }
+    else
+    {
+        <div class="buildings-list">
+            @for (int i = 0; i < Buildings.Count; i++)
+            {
+                var index = i; // Capture for closure
+                <BuildingRow Building="Buildings[index]" 
+                           BuildingChanged="(building) => OnBuildingChanged(index, building)"
+                           OnDelete="() => OnDeleteBuilding(index)" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<CreateBuildingRequest> Buildings { get; set; } = new List<CreateBuildingRequest>();
+    [Parameter] public EventCallback<List<CreateBuildingRequest>> BuildingsChanged { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Start with one empty building row for user to fill
+        if (!Buildings.Any())
+        {
+            Buildings.Add(new CreateBuildingRequest
+            {
+                Name = "",
+                Type = "Residential",
+                Floors = 0,
+                UnitsPerFloor = 0
+            });
+        }
+    }
+
+    private async Task AddNewBuilding()
+    {
+        var newBuilding = new CreateBuildingRequest
+        {
+            Name = "",
+            Type = "Residential",
+            Floors = 0,
+            UnitsPerFloor = 0
+        };
+        
+        Buildings.Add(newBuilding);
+        await BuildingsChanged.InvokeAsync(Buildings);
+    }
+
+    private async Task CloneLastBuilding()
+    {
+        if (Buildings.Any())
+        {
+            var lastBuilding = Buildings.Last();
+            var clonedBuilding = new CreateBuildingRequest
+            {
+                Name = GetNextBuildingName(lastBuilding.Name),
+                Type = lastBuilding.Type,
+                Floors = lastBuilding.Floors,
+                UnitsPerFloor = lastBuilding.UnitsPerFloor
+            };
+            
+            Buildings.Add(clonedBuilding);
+            await BuildingsChanged.InvokeAsync(Buildings);
+        }
+    }
+
+    private async Task OnBuildingChanged(int index, CreateBuildingRequest building)
+    {
+        if (index >= 0 && index < Buildings.Count)
+        {
+            Buildings[index] = building;
+            await BuildingsChanged.InvokeAsync(Buildings);
+        }
+    }
+
+    private async Task OnDeleteBuilding(int index)
+    {
+        if (index >= 0 && index < Buildings.Count)
+        {
+            Buildings.RemoveAt(index);
+            await BuildingsChanged.InvokeAsync(Buildings);
+        }
+    }
+
+    private string GetNextBuildingLetter()
+    {
+        var usedLetters = Buildings.Select(b => b.Name)
+            .Where(name => name.StartsWith("Block ") && name.Length == 7)
+            .Select(name => name[6])
+            .Where(c => char.IsLetter(c))
+            .ToHashSet();
+
+        for (char c = 'A'; c <= 'Z'; c++)
+        {
+            if (!usedLetters.Contains(c))
+                return c.ToString();
+        }
+        
+        return "Z"; // Fallback
+    }
+    
+    private string GetNextBuildingName(string originalName)
+    {
+        if (string.IsNullOrWhiteSpace(originalName))
+        {
+            return $"Block {GetNextBuildingLetter()}";
+        }
+        
+        // Try to increment number in the name
+        var match = System.Text.RegularExpressions.Regex.Match(originalName, @"(.+?)([0-9]+)$");
+        if (match.Success)
+        {
+            var baseName = match.Groups[1].Value;
+            var number = int.Parse(match.Groups[2].Value);
+            return $"{baseName}{number + 1}";
+        }
+        
+        // Try to increment letter in the name
+        var letterMatch = System.Text.RegularExpressions.Regex.Match(originalName, @"(.+?)([A-Z])$");
+        if (letterMatch.Success)
+        {
+            var baseName = letterMatch.Groups[1].Value;
+            var letter = letterMatch.Groups[2].Value[0];
+            if (letter < 'Z')
+            {
+                return $"{baseName}{(char)(letter + 1)}";
+            }
+        }
+        
+        // Default: append " Copy" or increment copy number
+        if (originalName.EndsWith(" Copy"))
+        {
+            return originalName + " 2";
+        }
+        else if (originalName.Contains(" Copy "))
+        {
+            var copyMatch = System.Text.RegularExpressions.Regex.Match(originalName, @"(.+ Copy )([0-9]+)$");
+            if (copyMatch.Success)
+            {
+                var baseName = copyMatch.Groups[1].Value;
+                var number = int.Parse(copyMatch.Groups[2].Value);
+                return $"{baseName}{number + 1}";
+            }
+        }
+        
+        return originalName + " Copy";
+    }
+}
+
+<style>
+    .building-manager {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        background-color: #fff;
+    }
+
+    .buildings-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+</style>

@@ -1,0 +1,154 @@
+@page "/signup"
+@layout AuthLayout
+@using CRC.Common.Models
+@using CRC.WebPortal.BlazorWebApp.Services
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components
+@using CRC.WebPortal.BlazorWebApp.Layout
+
+@inject IAuthService AuthService
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Sign Up - CRC WebPortal</PageTitle>
+
+<div class="container-fluid vh-100 d-flex align-items-center justify-content-center" style="background-color: #f8f9fa;">
+    <div class="row w-100 justify-content-center">
+        <div class="col-md-5 col-lg-4">
+            <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4 fw-normal" style="color: #333; font-size: 28px;">Sign Up</h2>
+                    
+                    <EditForm Model="@signupData" OnValidSubmit="@HandleValidSubmit" OnInvalidSubmit="@HandleInvalidSubmit" FormName="SignUpForm">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <InputText @bind-Value="signupData.FirstName" 
+                                          class="form-control form-control-lg" 
+                                          placeholder="First Name" 
+                                          style="border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; font-size: 14px;" />
+                                <ValidationMessage For="@(() => signupData.FirstName)" class="text-danger small mt-1" />
+                            </div>
+                            <div class="col-6">
+                                <InputText @bind-Value="signupData.LastName" 
+                                          class="form-control form-control-lg" 
+                                          placeholder="Last Name" 
+                                          style="border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; font-size: 14px;" />
+                                <ValidationMessage For="@(() => signupData.LastName)" class="text-danger small mt-1" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <InputText @bind-Value="signupData.Email" 
+                                      class="form-control form-control-lg" 
+                                      placeholder="Email" 
+                                      type="email"
+                                      style="border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; font-size: 14px;" />
+                            <ValidationMessage For="@(() => signupData.Email)" class="text-danger small mt-1" />
+                        </div>
+
+                        <div class="mb-3">
+                            <InputText @bind-Value="signupData.Password" 
+                                      class="form-control form-control-lg" 
+                                      placeholder="Password" 
+                                      type="password"
+                                      style="border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; font-size: 14px;" />
+                            <ValidationMessage For="@(() => signupData.Password)" class="text-danger small mt-1" />
+                        </div>
+
+                        <div class="mb-4">
+                            <InputText @bind-Value="signupData.ConfirmPassword" 
+                                      class="form-control form-control-lg" 
+                                      placeholder="Confirm Password" 
+                                      type="password"
+                                      style="border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; font-size: 14px;" />
+                            <ValidationMessage For="@(() => signupData.ConfirmPassword)" class="text-danger small mt-1" />
+                        </div>
+
+
+                        <button type="submit" 
+                                class="btn btn-primary w-100 mb-4" 
+                                disabled="@isLoading"
+                                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; padding: 12px; font-size: 16px; font-weight: 500;">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                <span>Creating Account...</span>
+                            }
+                            else
+                            {
+                                <span>Sign Up</span>
+                            }
+                        </button>
+
+                        <div class="text-center mb-3">
+                            <span style="color: #6c757d; font-size: 14px;">Or With</span>
+                        </div>
+
+                        <div class="text-center">
+                            <span style="color: #6c757d; font-size: 14px;">Already have an account? </span>
+                            <a href="/signin" style="color: #667eea; text-decoration: none; font-weight: 500;">Sign In</a>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+</style>
+
+@code {
+    [SupplyParameterFromForm]
+    private SignupRequest signupData { get; set; } = default!;
+
+    private bool isLoading = false;
+
+    protected override void OnInitialized()
+    {
+        signupData ??= new SignupRequest();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        isLoading = true;
+
+        try
+        {
+            var result = await AuthService.SignUpAsync(signupData);
+            
+            if (result.IsSuccess)
+            {
+                await ToastService.ShowSuccessAsync("Registration successful! Redirecting to sign in...", 3000);
+                // Small delay to show success message, then redirect
+                await Task.Delay(1000);
+                Navigation.NavigateTo("/signin");
+            }
+            else
+            {
+                await ToastService.ShowErrorAsync(result.Message ?? "Registration failed. Please try again.", 5000);
+            }
+        }
+        catch (Exception)
+        {
+            await ToastService.ShowErrorAsync("An error occurred while processing your request.", 5000);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async void HandleInvalidSubmit()
+    {
+        await ToastService.ShowWarningAsync("Please correct the errors in the form.", 4000);
+        // Only field-level validation messages should show
+    }
+}

@@ -1,0 +1,212 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+
+<div class="pattern-row">
+    <div class="row g-2 align-items-center">
+        <div class="col-md-3">
+            <label class="form-label small">Type</label>
+            <select class="form-select form-select-sm" 
+                    @bind="localRow.UnitType" 
+                    @bind:after="NotifyChange">
+                <option value="">Select Type</option>
+                @foreach (var unitType in GetAvailableUnitTypes())
+                {
+                    <option value="@unitType">@unitType</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">1st Digit</label>
+            <select class="form-select form-select-sm" 
+                    @bind="localRow.FirstDigit" 
+                    @bind:after="NotifyChange">
+                <option value="Floor No.">Floor No.</option>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="Custom">Custom</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">2nd Digit</label>
+            <select class="form-select form-select-sm" 
+                    @bind="localRow.SecondDigit" 
+                    @bind:after="NotifyChange">
+                <option value="0">0</option>
+                <option value="Unit No.">Unit No.</option>
+                <option value="/">/</option>
+                <option value="-">-</option>
+                <option value="Custom">Custom</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">3rd Digit</label>
+            <select class="form-select form-select-sm" 
+                    @bind="localRow.ThirdDigit" 
+                    @bind:after="NotifyChange">
+                <option value="Unit No.">Unit No.</option>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="Custom">Custom</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Result</label>
+            <div class="result-preview">@localRow.Result</div>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label small">&nbsp;</label>
+            <button type="button" class="btn btn-outline-danger btn-sm pattern-delete-btn" 
+                    @onclick="OnDelete" title="Delete Row">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom input fields (shown when Custom is selected) -->
+    @if (localRow.FirstDigit == "Custom" || localRow.SecondDigit == "Custom" || localRow.ThirdDigit == "Custom")
+    {
+        <div class="row g-2 mt-2">
+            @if (localRow.FirstDigit == "Custom")
+            {
+                <div class="col-md-4">
+                    <label class="form-label small">Custom 1st Digit</label>
+                    <input type="text" class="form-control form-control-sm" 
+                           @bind="localRow.CustomFirstDigit" 
+                           @onblur="NotifyChange"
+                           placeholder="Enter custom value" />
+                </div>
+            }
+            @if (localRow.SecondDigit == "Custom")
+            {
+                <div class="col-md-4">
+                    <label class="form-label small">Custom 2nd Digit</label>
+                    <input type="text" class="form-control form-control-sm" 
+                           @bind="localRow.CustomSecondDigit" 
+                           @onblur="NotifyChange"
+                           placeholder="Enter custom value" />
+                </div>
+            }
+            @if (localRow.ThirdDigit == "Custom")
+            {
+                <div class="col-md-4">
+                    <label class="form-label small">Custom 3rd Digit</label>
+                    <input type="text" class="form-control form-control-sm" 
+                           @bind="localRow.CustomThirdDigit" 
+                           @onblur="NotifyChange"
+                           placeholder="Enter custom value" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .pattern-delete-btn {
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .pattern-delete-btn:hover {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: white;
+        transform: scale(1.05);
+    }
+
+    .form-select-sm {
+        border-radius: 4px;
+        border: 1px solid #ced4da;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+
+    .form-select-sm:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    .result-preview {
+        background-color: #e9ecef;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-weight: 500;
+        text-align: center;
+        min-height: 31px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+@code {
+    [Parameter] public UnitNameDisplay Row { get; set; } = new();
+    [Parameter] public EventCallback<UnitNameDisplay> RowChanged { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public List<string> UnitTypes { get; set; } = new();
+    [Parameter] public List<string> UsedUnitTypes { get; set; } = new();
+
+    private UnitNameDisplay localRow = new();
+
+    protected override void OnParametersSet()
+    {
+        localRow = new UnitNameDisplay
+        {
+            UnitType = Row.UnitType,
+            FirstDigit = Row.FirstDigit,
+            SecondDigit = Row.SecondDigit,
+            ThirdDigit = Row.ThirdDigit,
+            CustomFirstDigit = Row.CustomFirstDigit,
+            CustomSecondDigit = Row.CustomSecondDigit,
+            CustomThirdDigit = Row.CustomThirdDigit,
+            Result = Row.Result
+        };
+    }
+
+    private async Task NotifyChange()
+    {
+        await RowChanged.InvokeAsync(localRow);
+    }
+    
+    private List<string> GetAvailableUnitTypes()
+    {
+        // Always include the current row's unit type (for editing existing rows)
+        var availableTypes = UnitTypes.Where(ut => 
+            !UsedUnitTypes.Contains(ut) || ut == Row.UnitType
+        ).ToList();
+        
+        return availableTypes;
+    }
+}
+
+<style>
+    .pattern-row {
+        padding: 15px;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        background-color: #f8f9fa;
+    }
+
+    .pattern-row:hover {
+        border-color: #007bff;
+        background-color: #f0f8ff;
+    }
+
+    .result-preview {
+        font-weight: 600;
+        color: #28a745;
+        font-size: 1.1em;
+        text-align: center;
+        padding: 6px;
+        background-color: #e8f5e8;
+        border-radius: 4px;
+        border: 1px solid #b3e5b3;
+        font-family: 'Courier New', monospace;
+    }
+
+    .form-label.small {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 4px;
+    }
+</style>

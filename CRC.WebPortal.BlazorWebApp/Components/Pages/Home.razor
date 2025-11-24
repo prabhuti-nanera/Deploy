@@ -1,0 +1,248 @@
+@page "/home"
+@layout CRC.WebPortal.BlazorWebApp.Layout.MainLayout
+@using Microsoft.AspNetCore.Components.Authorization
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.BlazorWebApp.Services
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@inject HttpClient HttpClient
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Projects - CRC WebPortal</PageTitle>
+
+<div class="container-fluid p-4" style="background-color: #f8f9fa; min-height: 100vh;">
+    <AuthorizeView>
+        <Authorized Context="authContext">
+
+            <!-- Projects Section -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Projects</h5>
+                <button class="btn btn-primary btn-sm" @onclick="CreateNewProject">
+                    <i class="bi bi-plus-circle"></i> New Project
+                </button>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading projects...</p>
+                </div>
+            }
+            else if (projects == null || !projects.Any())
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-building display-1 text-muted"></i>
+                    <h4 class="mt-3 text-muted">No Projects Found</h4>
+                    <p class="text-muted">Get started by creating your first project.</p>
+                    <button class="btn btn-primary" @onclick="CreateNewProject">
+                        <i class="bi bi-plus-circle"></i> Create First Project
+                    </button>
+                </div>
+            }
+            else
+            {
+                <!-- Table Header -->
+                <div class="table-header mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 15px;">
+                    <div class="row text-white">
+                        <div class="col-4">
+                            <strong>Project Name</strong>
+                        </div>
+                        <div class="col-3">
+                            <strong>Address</strong>
+                        </div>
+                        <div class="col-3">
+                            <strong>Admin</strong>
+                        </div>
+                        <div class="col-2 text-center">
+                            <strong>Actions</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Rows -->
+                @foreach (var project in projects)
+                {
+                    <div class="project-row mb-2 p-3" style="background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div class="row align-items-center">
+                            <div class="col-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="project-icon me-3" style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <i class="bi bi-building text-white"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">@project.Name</h6>
+                                        <small class="text-muted">@project.Type</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="text-muted">@project.Address</div>
+                            </div>
+                            <div class="col-3">
+                                <div>
+                                    <div class="fw-semibold">@project.AdminName</div>
+                                    <small class="text-muted">
+                                        <i class="bi bi-telephone me-1"></i>@project.AdminMobile
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-2 text-center">
+                                <div class="d-flex gap-1 justify-content-center flex-nowrap">
+                                    <button class="btn btn-outline-success" 
+                                            @onclick="() => ViewOwnership(project.Id)"
+                                            title="Unit Ownership"
+                                            style="border-radius: 4px; padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                                        <i class="bi bi-house-check"></i>
+                                    </button>
+                                    <button class="btn btn-outline-primary" 
+                                            @onclick="() => EditProject(project.Id)"
+                                            title="Edit Project"
+                                            style="border-radius: 4px; padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" 
+                                            @onclick="() => DeleteProject(project.Id, project.Name)"
+                                            title="Delete Project"
+                                            style="border-radius: 4px; padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </Authorized>
+        <NotAuthorized>
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5>Please sign in to access the dashboard</h5>
+                            <button class="btn btn-primary mt-3" @onclick="GoToLogin">Sign In</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private List<ProjectDto> projects = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjects();
+    }
+
+    private async Task LoadProjects()
+    {
+        try
+        {
+            isLoading = true;
+            var response = await HttpClient.GetFromJsonAsync<BaseResponse<List<ProjectDto>>>("api/project");
+            
+            if (response?.Succeeded == true && response.Data != null)
+            {
+                projects = response.Data;
+            }
+            else
+            {
+                await ToastService.ShowErrorAsync("Failed to load projects: " + (response?.Message ?? "Unknown error"));
+            }
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync("Error loading projects: " + ex.Message);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoToLogin()
+    {
+        Navigation.NavigateTo("/signin");
+    }
+
+    private void CreateNewProject()
+    {
+        Navigation.NavigateTo("/projects/new");
+    }
+
+    private void EditProject(int projectId)
+    {
+        Navigation.NavigateTo($"/projects/edit/{projectId}");
+    }
+
+    private void ViewOwnership(int projectId)
+    {
+        Navigation.NavigateTo($"/projects/{projectId}/ownership");
+    }
+
+    private async Task DeleteProject(int projectId, string projectName)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete the project '{projectName}'? This action cannot be undone.");
+        
+        if (!confirmed) return;
+
+        try
+        {
+            var response = await HttpClient.DeleteAsync($"api/project/{projectId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await ToastService.ShowSuccessAsync($"Project '{projectName}' deleted successfully.");
+                await LoadProjects(); // Reload the list
+            }
+            else
+            {
+                await ToastService.ShowErrorAsync("Failed to delete project.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync("Error deleting project: " + ex.Message);
+        }
+    }
+
+    private string GetProjectTypeBadge(string type)
+    {
+        return type switch
+        {
+            "Res" => "primary",
+            "Com" => "warning",
+            "Other" => "secondary",
+            _ => "light"
+        };
+    }
+}
+
+<style>
+    .table th {
+        border-top: none;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+    
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+    }
+</style>

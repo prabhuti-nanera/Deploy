@@ -1,0 +1,51 @@
+@page "/auth-test"
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Auth Test - CRC WebPortal</PageTitle>
+
+<div class="container mt-4">
+    <h3>Authentication State Test</h3>
+    
+    <div class="card">
+        <div class="card-body">
+            <h5>Current Authentication Status:</h5>
+            
+            @if (authState != null)
+            {
+                <p><strong>Is Authenticated:</strong> @authState.User.Identity?.IsAuthenticated</p>
+                <p><strong>Authentication Type:</strong> @authState.User.Identity?.AuthenticationType</p>
+                <p><strong>Name:</strong> @authState.User.Identity?.Name</p>
+                
+                <h6>Claims:</h6>
+                <ul>
+                    @foreach (var claim in authState.User.Claims)
+                    {
+                        <li><strong>@claim.Type:</strong> @claim.Value</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p>Loading authentication state...</p>
+            }
+            
+            <button class="btn btn-primary" @onclick="RefreshAuthState">Refresh Auth State</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private AuthenticationState? authState;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAuthState();
+    }
+
+    private async Task RefreshAuthState()
+    {
+        authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        StateHasChanged();
+    }
+}

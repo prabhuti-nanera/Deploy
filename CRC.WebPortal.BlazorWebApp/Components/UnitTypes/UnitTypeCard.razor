@@ -1,0 +1,197 @@
+@using Microsoft.AspNetCore.Components
+@using CRC.WebPortal.BlazorWebApp.Models
+
+<div class="unit-type-card" @onmouseenter="OnMouseEnter" @onmouseleave="OnMouseLeave">
+    @if (IsEditing)
+    {
+        <input type="text" 
+               @bind="EditingName" 
+               @onblur="SaveEdit" 
+               @onkeypress="OnKeyPress"
+               class="unit-type-edit-input"
+               @ref="inputElement" />
+    }
+    else
+    {
+        <span class="unit-type-name">@UnitTypeName</span>
+    }
+    
+    @if (IsHovered && !IsEditing)
+    {
+        <div class="unit-type-hover-actions">
+            <button type="button" 
+                    class="hover-btn edit-btn" 
+                    @onclick="StartEdit"
+                    @onclick:stopPropagation="true"
+                    title="Rename">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button type="button" 
+                    class="hover-btn delete-btn" 
+                    @onclick="DeleteUnitType"
+                    @onclick:stopPropagation="true"
+                    title="Remove">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string UnitTypeName { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> OnRename { get; set; }
+    [Parameter] public EventCallback<string> OnDelete { get; set; }
+
+    private bool IsHovered = false;
+    private bool IsEditing = false;
+    private string EditingName = string.Empty;
+    private ElementReference inputElement;
+
+    private void OnMouseEnter()
+    {
+        IsHovered = true;
+    }
+
+    private void OnMouseLeave()
+    {
+        IsHovered = false;
+    }
+
+    private async Task StartEdit()
+    {
+        IsEditing = true;
+        EditingName = UnitTypeName;
+        StateHasChanged();
+        await Task.Delay(10);
+        await inputElement.FocusAsync();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (!string.IsNullOrWhiteSpace(EditingName) && EditingName != UnitTypeName)
+        {
+            await OnRename.InvokeAsync(EditingName.Trim());
+        }
+        
+        IsEditing = false;
+        EditingName = string.Empty;
+    }
+
+    private async Task OnKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SaveEdit();
+        }
+        else if (e.Key == "Escape")
+        {
+            IsEditing = false;
+            EditingName = string.Empty;
+        }
+    }
+
+    private async Task DeleteUnitType()
+    {
+        await OnDelete.InvokeAsync(UnitTypeName);
+    }
+}
+
+<style>
+    .unit-type-card {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #6366f1;
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        margin: 2px;
+        min-width: 60px;
+        min-height: 32px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
+        font-weight: 500;
+        font-size: 13px;
+        user-select: none;
+    }
+
+    .unit-type-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .unit-type-name {
+        white-space: nowrap;
+        text-align: center;
+        width: 100%;
+    }
+
+    .unit-type-edit-input {
+        background: rgba(255,255,255,0.9);
+        border: 1px solid rgba(255,255,255,0.5);
+        color: #333;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        width: 100%;
+        text-align: center;
+        outline: none;
+    }
+
+    .unit-type-edit-input:focus {
+        border-color: white;
+        background: white;
+    }
+
+    .unit-type-hover-actions {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        display: flex;
+        gap: 4px;
+        opacity: 0;
+        animation: fadeIn 0.2s ease forwards;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    .hover-btn {
+        width: 22px;
+        height: 22px;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .edit-btn {
+        background: #28a745;
+        color: white;
+    }
+
+    .edit-btn:hover {
+        background: #218838;
+        transform: scale(1.1);
+    }
+
+    .delete-btn {
+        background: #dc3545;
+        color: white;
+    }
+
+    .delete-btn:hover {
+        background: #c82333;
+        transform: scale(1.1);
+    }
+</style>

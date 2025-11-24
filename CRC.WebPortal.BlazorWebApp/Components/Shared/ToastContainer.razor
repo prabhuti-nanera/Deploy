@@ -1,0 +1,237 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.BlazorWebApp.Services
+@inject IToastService ToastService
+@implements IDisposable
+
+@* Professional Toast Container *@
+<div class="toast-container">
+    @foreach (var toast in _activeToasts)
+    {
+        <div class="professional-toast @(toast.Type.ToString().ToLower()) @(_animatingOut.Contains(toast.Id) ? "toast-exit" : "toast-enter")"
+             @key="toast.Id">
+            <div class="toast-content">
+                <div class="toast-icon">
+                    @switch (toast.Type)
+                    {
+                        case ToastType.Success:
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12l2 2 4-4"></path>
+                                <circle cx="12" cy="12" r="10"></circle>
+                            </svg>
+                            break;
+                        case ToastType.Error:
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                            break;
+                        case ToastType.Warning:
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            break;
+                        case ToastType.Info:
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            break;
+                    }
+                </div>
+                <div class="toast-message">@toast.Message</div>
+                <button class="toast-close" @onclick="() => RemoveToast(toast.Id)" type="button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .professional-toast {
+        pointer-events: auto;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border: 1px solid #e5e7eb;
+        min-width: 320px;
+        max-width: 400px;
+        opacity: 0;
+        transform: translateX(100%);
+        transition: all 0.3s ease-out;
+    }
+
+    .professional-toast.toast-enter {
+        animation: slideInRight 0.3s ease-out forwards;
+    }
+
+    .professional-toast.toast-exit {
+        animation: slideOutRight 0.3s ease-in forwards;
+    }
+
+    .professional-toast.error {
+        border-left: 4px solid #ef4444;
+    }
+
+    .professional-toast.success {
+        border-left: 4px solid #10b981;
+    }
+
+    .professional-toast.warning {
+        border-left: 4px solid #f59e0b;
+    }
+
+    .professional-toast.info {
+        border-left: 4px solid #3b82f6;
+    }
+
+    .toast-content {
+        display: flex;
+        align-items: center;
+        padding: 20px;
+        gap: 12px;
+    }
+
+    .toast-icon {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+    }
+
+    .error .toast-icon {
+        color: #ef4444;
+    }
+
+    .success .toast-icon {
+        color: #10b981;
+    }
+
+    .warning .toast-icon {
+        color: #f59e0b;
+    }
+
+    .info .toast-icon {
+        color: #3b82f6;
+    }
+
+    .toast-message {
+        flex: 1;
+        font-size: 14px;
+        line-height: 1.4;
+        color: #374151;
+        font-weight: 400;
+    }
+
+    .toast-close {
+        flex-shrink: 0;
+        background: none;
+        border: none;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .toast-close:hover {
+        color: #6b7280;
+        background-color: #f3f4f6;
+    }
+
+    @@keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @@keyframes slideOutRight {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .professional-toast {
+            min-width: 320px;
+            max-width: 90vw;
+        }
+    }
+</style>
+
+@code {
+    private List<ToastMessage> _activeToasts = new();
+    private readonly HashSet<string> _animatingOut = new();
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to toast service events
+        ToastService.OnToastAdded += HandleToastAdded;
+        ToastService.OnToastRemoved += HandleToastRemoved;
+        
+        // Initialize with existing toasts
+        _activeToasts = ToastService.ActiveToasts.ToList();
+    }
+
+    private async void HandleToastAdded(object? sender, ToastMessage toast)
+    {
+        _activeToasts.Add(toast);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void HandleToastRemoved(object? sender, string toastId)
+    {
+        // Start exit animation
+        _animatingOut.Add(toastId);
+        await InvokeAsync(StateHasChanged);
+        
+        // Wait for animation to complete, then remove from DOM
+        await Task.Delay(300);
+        _activeToasts.RemoveAll(t => t.Id == toastId);
+        _animatingOut.Remove(toastId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoveToast(string toastId)
+    {
+        await ToastService.RemoveToastAsync(toastId);
+    }
+
+    public void Dispose()
+    {
+        ToastService.OnToastAdded -= HandleToastAdded;
+        ToastService.OnToastRemoved -= HandleToastRemoved;
+    }
+}

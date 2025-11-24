@@ -1,0 +1,123 @@
+@page "/logout"
+@using CRC.WebPortal.BlazorWebApp.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Logout - CRC WebPortal</PageTitle>
+
+<div class="container-fluid vh-100 d-flex align-items-center justify-content-center" style="background-color: #f8f9fa;">
+    <div class="row w-100 justify-content-center">
+        <div class="col-md-5 col-lg-4">
+            <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+                <div class="card-body p-5 text-center">
+                    @if (!isLoggingOut && !logoutComplete)
+                    {
+                        <h2 class="mb-4 fw-normal" style="color: #333; font-size: 28px;">Logout</h2>
+                        <p class="mb-4" style="color: #6c757d; font-size: 16px;">
+                            Are you sure you want to logout?
+                        </p>
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-danger btn-lg" 
+                                    @onclick="HandleLogout"
+                                    style="border-radius: 8px; font-weight: 500; padding: 12px;">
+                                <i class="bi bi-box-arrow-right me-2"></i>
+                                Yes, Logout
+                            </button>
+                            
+                            <button class="btn btn-outline-secondary btn-lg" 
+                                    @onclick="CancelLogout"
+                                    style="border-radius: 8px; font-weight: 500; padding: 12px;">
+                                <i class="bi bi-arrow-left me-2"></i>
+                                Cancel
+                            </button>
+                        </div>
+                    }
+                    else if (isLoggingOut)
+                    {
+                        <h2 class="mb-4 fw-normal" style="color: #333; font-size: 28px;">Logging Out</h2>
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p style="color: #6c757d;">Please wait...</p>
+                    }
+                    else if (logoutComplete)
+                    {
+                        <div class="text-success mb-3">
+                            <i class="bi bi-check-circle-fill" style="font-size: 3rem;"></i>
+                        </div>
+                        <h2 class="mb-3 fw-normal" style="color: #333; font-size: 28px;">Logged Out</h2>
+                        <p class="mb-4" style="color: #6c757d; font-size: 16px;">
+                            You have been successfully logged out.
+                        </p>
+                        
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success" role="alert" style="border-radius: 8px; font-size: 14px;">
+                                @successMessage
+                            </div>
+                        }
+                    }
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3" role="alert" style="border-radius: 8px; font-size: 14px;">
+                            @errorMessage
+                        </div>
+                        
+                        <button class="btn btn-primary btn-lg mt-3" 
+                                @onclick="RetryLogout"
+                                style="border-radius: 8px; font-weight: 500; padding: 12px;">
+                            <i class="bi bi-arrow-clockwise me-2"></i>
+                            Try Again
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoggingOut = false;
+    private bool logoutComplete = false;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+
+    private async Task HandleLogout()
+    {
+        isLoggingOut = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            await AuthService.LogoutAsync();
+            logoutComplete = true;
+            successMessage = "You have been logged out successfully.";
+            
+            // Redirect to signin after a short delay
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/signin");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred during logout: {ex.Message}";
+        }
+        finally
+        {
+            isLoggingOut = false;
+        }
+    }
+
+    private void CancelLogout()
+    {
+        Navigation.NavigateTo("/home");
+    }
+
+    private async Task RetryLogout()
+    {
+        errorMessage = string.Empty;
+        await HandleLogout();
+    }
+}

@@ -1,0 +1,200 @@
+@using CRC.WebPortal.BlazorWebApp.Services
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.Shared.Dtos
+
+<div class="unit-type-tag" @onmouseenter="OnMouseEnter" @onmouseleave="OnMouseLeave">
+    @if (IsEditing)
+    {
+        <input type="text" 
+               @bind="EditingName" 
+               @onblur="SaveEdit" 
+               @onkeypress="OnKeyPress"
+               class="unit-type-input"
+               @ref="inputElement" />
+    }
+    else
+    {
+        <span class="unit-type-name">@UnitType.Name</span>
+    }
+    
+    @if (IsHovered)
+    {
+        <div class="unit-type-actions">
+            <button type="button" 
+                    class="btn-edit" 
+                    @onclick="StartEdit"
+                    title="Rename">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button type="button" 
+                    class="btn-delete" 
+                    @onclick="DeleteUnitType"
+                    title="Remove">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public UnitTypeDto UnitType { get; set; } = new();
+    [Parameter] public EventCallback<UnitTypeDto> OnEdit { get; set; }
+    [Parameter] public EventCallback<UnitTypeDto> OnDelete { get; set; }
+
+    private bool IsHovered = false;
+    private bool IsEditing = false;
+    private string EditingName = string.Empty;
+    private ElementReference inputElement;
+
+    private void OnMouseEnter()
+    {
+        IsHovered = true;
+    }
+
+    private void OnMouseLeave()
+    {
+        IsHovered = false;
+    }
+
+    private async Task StartEdit()
+    {
+        IsEditing = true;
+        EditingName = UnitType.Name;
+        StateHasChanged();
+        await Task.Delay(10); // Small delay to ensure element is rendered
+        await inputElement.FocusAsync();
+    }
+
+    private async Task SaveEdit()
+    {
+        if (!string.IsNullOrWhiteSpace(EditingName) && EditingName != UnitType.Name)
+        {
+            var updatedUnitType = new UnitTypeDto
+            {
+                Id = UnitType.Id,
+                Name = EditingName.Trim(),
+                Description = UnitType.Description,
+                DisplayOrder = UnitType.DisplayOrder,
+                ProjectId = UnitType.ProjectId
+            };
+            
+            await OnEdit.InvokeAsync(updatedUnitType);
+        }
+        
+        IsEditing = false;
+        EditingName = string.Empty;
+    }
+
+    private async Task OnKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SaveEdit();
+        }
+        else if (e.Key == "Escape")
+        {
+            IsEditing = false;
+            EditingName = string.Empty;
+        }
+    }
+
+    private async Task DeleteUnitType()
+    {
+        await OnDelete.InvokeAsync(UnitType);
+    }
+}
+
+<style>
+    .unit-type-tag {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        background: #4285f4;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        min-height: 36px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(66, 133, 244, 0.2);
+        border: none;
+    }
+
+    .unit-type-tag:hover {
+        background: #3367d6;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(66, 133, 244, 0.3);
+    }
+
+    .unit-type-name {
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+
+    .unit-type-input {
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        width: 100%;
+        outline: none;
+        min-width: 80px;
+    }
+
+    .unit-type-input::placeholder {
+        color: rgba(255,255,255,0.7);
+    }
+
+    .unit-type-actions {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        display: flex;
+        gap: 2px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    .unit-type-tag:hover .unit-type-actions {
+        opacity: 1;
+    }
+
+    .btn-edit, .btn-delete {
+        width: 18px;
+        height: 18px;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .btn-edit {
+        background: #34a853;
+        color: white;
+    }
+
+    .btn-edit:hover {
+        background: #2d8f47;
+        transform: scale(1.1);
+    }
+
+    .btn-delete {
+        background: #ea4335;
+        color: white;
+    }
+
+    .btn-delete:hover {
+        background: #d33b2c;
+        transform: scale(1.1);
+    }
+</style>

@@ -1,0 +1,796 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.Shared.Dtos
+@using CRC.WebPortal.Shared.Requests
+@using System.Linq
+@using CRC.WebPortal.BlazorWebApp.Services
+@inject HttpClient HttpClient
+@inject IToastService ToastService
+
+<div class="unit-preview">
+    <div class="preview-header">
+        <h6 class="mb-0"> Generated Units</h6>
+        <div class="d-flex align-items-center gap-2">
+            @if (Units.Any())
+            {
+                <div class="unit-count">
+                    <span class="badge bg-primary">@Units.Count Units</span>
+                </div>
+            }
+         
+        </div>
+    </div>
+
+    @if (!Units.Any())
+    {
+        <div class="empty-state">
+            <i class="fas fa-home fa-3x mb-3 text-muted"></i>
+            <h6 class="text-muted">No Units Generated</h6>
+            <p class="text-muted small">Configure buildings and patterns to see generated units here.</p>
+       
+        </div>
+    }
+    else
+    {
+        <!-- Building Filter -->
+        <div class="building-filter mb-3">
+            <label class="form-label text-muted small mb-1">
+                <i class="fas fa-filter me-1"></i>Filter by Building
+            </label>
+            <select class="form-select form-select-sm" @bind="selectedBuilding" @bind:after="FilterUnits" title="Filter units by building">
+                <option value="">All Buildings (@Units.Count)</option>
+                @foreach (var building in GetAvailableBuildings())
+                {
+                    <option value="@building">@building (@GetUnitsCountForBuilding(building))</option>
+                }
+            </select>
+        </div>
+
+        <!-- Units Grid -->
+        <div class="units-grid">
+            @foreach (var unit in GetFilteredUnits())
+            {
+                <div class="unit-card" @onclick="() => SelectUnit(unit)">
+                    <!-- Prominent Unit Number/Preview Result in Center -->
+                    <div class="unit-number-prominent">
+                        <div class="preview-result-label">Unit Number</div>
+                        <div class="preview-result-number">@unit.UnitNumber</div>
+                        <div class="unit-type-badge">@unit.UnitType</div>
+                    </div>
+                    
+                    <!-- Unit Details -->
+                    <div class="unit-details-compact">
+                        <div class="unit-info">
+                            <i class="fas fa-building text-muted me-1"></i>
+                            <span class="unit-building">@unit.BuildingName</span>
+                        </div>
+                        <div class="unit-info">
+                            <i class="fas fa-layer-group text-muted me-1"></i>
+                            <span class="unit-floor">Floor @unit.FloorNumber</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="unit-actions">
+                        <button type="button" class="btn btn-sm btn-outline-primary edit-btn" 
+                                @onclick:stopPropagation="true"
+                                @onclick="() => EditUnit(unit)" title="Edit Unit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
+                                @onclick:stopPropagation="true"
+                                @onclick="() => DeleteUnit(unit)" title="Delete Unit">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Actions -->
+        <div class="preview-actions mt-3">
+            <div class="actions-container-compact">
+                <!-- Remove Building Section -->
+                <div class="action-section-compact">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label small mb-0 text-muted">Remove Building:</label>
+                        <select class="form-select form-select-sm" @bind="selectedBuildingForRemoval" 
+                                title="Choose building to remove">
+                            <option value="">Select building...</option>
+                            @foreach (var building in GetAvailableBuildings())
+                            {
+                                <option value="@building">@building</option>
+                            }
+                        </select>
+                        <button type="button" class="btn btn-outline-danger btn-sm" 
+                                @onclick="ShowRemoveBuildingConfirmation" 
+                                disabled="@(string.IsNullOrEmpty(selectedBuildingForRemoval))"
+                                title="Remove building units">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Delete All Section -->
+                <div class="action-section-compact">
+                    <button type="button" class="btn btn-danger btn-sm" 
+                            @onclick="ShowDeleteAllConfirmation" 
+                            disabled="@(!Units.Any())"
+                            title="Delete all units">
+                        <i class="fas fa-trash-alt me-1"></i>Delete All
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Edit Unit Modal -->
+@if (editingUnit != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Unit</h5>
+                    <button type="button" class="btn-close" @onclick="CancelEdit"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Unit Number</label>
+                        <input type="text" class="form-control" @bind="editingUnit.UnitNumber" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Unit Type</label>
+                        <input type="text" class="form-control" @bind="editingUnit.UnitType" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Floor Number</label>
+                        <input type="number" class="form-control" @bind="editingUnit.FloorNumber" min="1" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveEdit">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Remove Building Confirmation Modal -->
+@if (showRemoveBuildingConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Remove Building</h5>
+                    <button type="button" class="btn-close" @onclick="CancelRemoveBuildingConfirmation"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                    <p class="mb-2">Remove all units from <strong>@selectedBuildingForRemoval</strong>?</p>
+                    <small class="text-muted">@GetUnitsCountForBuilding(selectedBuildingForRemoval) units will be removed</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelRemoveBuildingConfirmation">Cancel</button>
+                    <button type="button" class="btn btn-warning" @onclick="ConfirmRemoveBuilding">
+                        <i class="fas fa-building"></i> Remove Building Units
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete All Confirmation Modal -->
+@if (showDeleteAllConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete All</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDeleteAllConfirmation"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <i class="fas fa-trash-alt text-danger fa-3x mb-3"></i>
+                    <p class="mb-2">Delete all <strong>@Units.Count units</strong>?</p>
+                    <small class="text-muted">This action cannot be undone</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDeleteAllConfirmation">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAll">
+                        <i class="fas fa-trash-alt"></i> Delete All Units
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public List<CRC.WebPortal.Shared.Dtos.UnitDto> Units { get; set; } = new();
+    [Parameter] public EventCallback<List<CRC.WebPortal.Shared.Dtos.UnitDto>> UnitsChanged { get; set; }
+    [Parameter] public List<Models.CreateBuildingRequest> Buildings { get; set; } = new();
+    [Parameter] public List<string> UnitTypes { get; set; } = new();
+    [Parameter] public NumberingPatternBuilder.UnitNumberPatternConfig? PatternConfig { get; set; }
+    [Parameter] public int ProjectId { get; set; }
+
+    private string selectedBuilding = "";
+    private string selectedBuildingForRemoval = "";
+    private CRC.WebPortal.Shared.Dtos.UnitDto? editingUnit = null;
+    private CRC.WebPortal.Shared.Dtos.UnitDto? selectedUnit = null;
+    private bool showRemoveBuildingConfirmation = false;
+    private bool showDeleteAllConfirmation = false;
+    
+
+    private List<string> GetAvailableBuildings()
+    {
+        return Units.Select(u => u.BuildingName).Distinct().OrderBy(b => b).ToList();
+    }
+
+    private List<CRC.WebPortal.Shared.Dtos.UnitDto> GetFilteredUnits()
+    {
+        var filtered = Units.AsEnumerable();
+        
+        if (!string.IsNullOrEmpty(selectedBuilding))
+        {
+            filtered = filtered.Where(u => u.BuildingName == selectedBuilding);
+        }
+        
+        return filtered.OrderBy(u => u.BuildingName)
+                      .ThenBy(u => u.FloorNumber)
+                      .ThenBy(u => u.UnitNumber)
+                      .ToList();
+    }
+
+    private void FilterUnits()
+    {
+        StateHasChanged();
+    }
+
+    private void SelectUnit(CRC.WebPortal.Shared.Dtos.UnitDto unit)
+    {
+        selectedUnit = selectedUnit?.Id == unit.Id ? null : unit;
+    }
+
+    private void EditUnit(CRC.WebPortal.Shared.Dtos.UnitDto unit)
+    {
+        editingUnit = new CRC.WebPortal.Shared.Dtos.UnitDto
+        {
+            Id = unit.Id,
+            UnitNumber = unit.UnitNumber,
+            UnitType = unit.UnitType,
+            FloorNumber = unit.FloorNumber,
+            BuildingName = unit.BuildingName,
+            ProjectId = unit.ProjectId
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingUnit = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingUnit != null)
+        {
+            var index = Units.FindIndex(u => u.Id == editingUnit.Id);
+            if (index >= 0)
+            {
+                Units[index] = editingUnit;
+                await UnitsChanged.InvokeAsync(Units);
+            }
+            editingUnit = null;
+        }
+    }
+
+    private async Task DeleteUnit(CRC.WebPortal.Shared.Dtos.UnitDto unit)
+    {
+        Units.Remove(unit);
+        await UnitsChanged.InvokeAsync(Units);
+    }
+
+    // Building removal methods
+    private void ShowRemoveBuildingConfirmation()
+    {
+        if (!string.IsNullOrEmpty(selectedBuildingForRemoval))
+        {
+            showRemoveBuildingConfirmation = true;
+        }
+    }
+
+    private void CancelRemoveBuildingConfirmation()
+    {
+        showRemoveBuildingConfirmation = false;
+    }
+
+    private async Task ConfirmRemoveBuilding()
+    {
+        if (!string.IsNullOrEmpty(selectedBuildingForRemoval))
+        {
+            var unitsToRemove = Units.Where(u => u.BuildingName == selectedBuildingForRemoval).ToList();
+            foreach (var unit in unitsToRemove)
+            {
+                Units.Remove(unit);
+            }
+            
+            // Reset selection if the filtered building was removed
+            if (selectedBuilding == selectedBuildingForRemoval)
+            {
+                selectedBuilding = "";
+            }
+            
+            selectedBuildingForRemoval = "";
+            showRemoveBuildingConfirmation = false;
+            await UnitsChanged.InvokeAsync(Units);
+        }
+    }
+
+    private int GetUnitsCountForBuilding(string buildingName)
+    {
+        return Units.Count(u => u.BuildingName == buildingName);
+    }
+
+    // Delete all methods
+    private void ShowDeleteAllConfirmation()
+    {
+        showDeleteAllConfirmation = true;
+    }
+
+    private void CancelDeleteAllConfirmation()
+    {
+        showDeleteAllConfirmation = false;
+    }
+
+    private async Task ConfirmDeleteAll()
+    {
+        Units.Clear();
+        selectedBuilding = "";
+        selectedBuildingForRemoval = "";
+        showDeleteAllConfirmation = false;
+        await UnitsChanged.InvokeAsync(Units);
+    }
+
+    private void DeleteAllUnits()
+    {
+        ShowDeleteAllConfirmation();
+    }
+
+    // Removed CanGenerateUnits and GenerateUnits methods as requested
+
+    private string GenerateUnitNumber(UnitNameDisplay row, int floor, int unit, NumberingPatternBuilder.UnitNumberPatternConfig config)
+    {
+        var unitNumber = "";
+        
+        // Process each digit based on the row's configuration
+        var digitCount = row.OriginalDigitCount > 0 ? row.OriginalDigitCount : Math.Max(row.Digits.Count, 1);
+        
+        for (int i = 0; i < digitCount; i++)
+        {
+            var digit = row.GetDigit(i);
+            
+            if (digit == "Floor No.")
+            {
+                unitNumber += floor.ToString();
+            }
+            else if (digit == "Unit No.")
+            {
+                // Format unit number with appropriate padding
+                if (i == 1) // Second digit typically gets 2-digit padding
+                    unitNumber += unit.ToString("D2");
+                else
+                    unitNumber += unit.ToString();
+            }
+            else if (digit == "Custom")
+            {
+                var customValue = row.GetCustomDigit(i);
+                if (!string.IsNullOrEmpty(customValue))
+                {
+                    unitNumber += customValue;
+                }
+            }
+            else if (digit == " ")
+            {
+                unitNumber += " ";
+            }
+            else if (!string.IsNullOrEmpty(digit))
+            {
+                unitNumber += digit;
+            }
+        }
+        
+        // Don't pad with zeros if we have a meaningful unit number
+        return string.IsNullOrEmpty(unitNumber) ? "000" : unitNumber;
+    }
+
+}
+
+<style>
+    .unit-preview {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        background-color: #fff;
+        height: fit-content;
+    }
+
+    .preview-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+    }
+
+    .units-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 12px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .unit-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 16px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.875rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        min-height: 140px;
+    }
+
+    .unit-card:hover {
+        border-color: #007bff;
+        background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px rgba(0,123,255,0.2);
+    }
+
+    /* Prominent Preview Result Styling */
+    .unit-number-prominent {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 12px;
+        flex: 1;
+        justify-content: center;
+    }
+
+    .preview-result-label {
+        font-size: 0.7rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+        font-weight: 500;
+    }
+
+    .preview-result-number {
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: #007bff;
+        font-family: 'Courier New', monospace;
+        text-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        margin-bottom: 6px;
+        line-height: 1;
+    }
+
+    .unit-type-badge {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        box-shadow: 0 2px 6px rgba(40,167,69,0.3);
+    }
+
+    .unit-details-compact {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 12px;
+        width: 100%;
+    }
+
+    .unit-info {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    .unit-number {
+        font-size: 1.2em;
+        font-weight: 700;
+        color: #007bff;
+        text-align: center;
+        margin-bottom: 8px;
+        font-family: 'Courier New', monospace;
+    }
+
+    .unit-details {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-bottom: 8px;
+    }
+
+    .unit-type {
+        font-weight: 600;
+        color: #28a745;
+    }
+
+    .unit-building, .unit-floor {
+        font-size: 0.8rem;
+    }
+
+    .unit-actions {
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+    }
+
+    .unit-actions .btn {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+        transition: all 0.2s ease;
+        border-width: 1px;
+        min-width: 28px;
+        min-height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .unit-actions .btn i {
+        font-size: 0.9rem;
+        line-height: 1;
+    }
+
+    .unit-actions .btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    .edit-btn:hover {
+        background-color: #007bff !important;
+        color: white !important;
+        border-color: #007bff !important;
+    }
+
+    .delete-btn:hover {
+        background-color: #dc3545 !important;
+        color: white !important;
+        border-color: #dc3545 !important;
+    }
+
+    .preview-actions {
+        padding-top: 15px;
+        border-top: 1px solid #e9ecef;
+    }
+
+    .actions-container-compact {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    .action-section-compact {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .action-section-compact .form-select {
+        min-width: 140px;
+        max-width: 180px;
+    }
+
+    .action-section-compact .btn {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+        min-width: auto;
+    }
+
+    .actions-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    @@media (min-width: 768px) {
+        .actions-container {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .action-section {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 16px;
+        transition: all 0.2s ease;
+    }
+
+    .action-section:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.1);
+    }
+
+    .action-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+    }
+
+    .action-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    @@media (min-width: 576px) {
+        .action-group {
+            flex-direction: row;
+            align-items: center;
+        }
+    }
+
+    .building-select {
+        min-width: 200px;
+        flex: 1;
+    }
+
+    .action-btn {
+        min-width: 160px;
+        padding: 8px 16px;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .action-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .action-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .btn-text {
+        font-size: 0.875rem;
+    }
+
+    .delete-all-info {
+        padding: 8px 12px;
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 4px;
+        margin-bottom: 8px;
+    }
+
+    @@media (min-width: 576px) {
+        .delete-all-info {
+            margin-bottom: 0;
+            margin-right: 12px;
+            flex: 1;
+        }
+    }
+
+    .unit-action-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+    }
+
+    .unit-action-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .building-filter {
+        margin-bottom: 20px;
+        padding: 16px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+
+    .building-filter .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .building-filter .form-select {
+        border-radius: 6px;
+        border: 1px solid #ced4da;
+        transition: all 0.2s ease;
+    }
+
+    .building-filter .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+    }
+
+    .unit-count {
+        margin-left: auto;
+    }
+
+    /* Modal enhancements */
+    .confirmation-details {
+        margin: 20px 0;
+    }
+
+    .stat-card {
+        text-align: center;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+
+    .stat-card h4 {
+        font-weight: 700;
+        color: #495057;
+    }
+
+    /* Responsive improvements */
+    @@media (max-width: 767px) {
+        .action-section {
+            padding: 12px;
+        }
+        
+        .action-btn {
+            min-width: 120px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+        
+        .building-select {
+            min-width: 150px;
+        }
+        
+        .btn-text {
+            font-size: 0.8rem;
+        }
+    }
+
+    /* Accessibility improvements */
+    .action-btn:focus {
+        outline: 2px solid #007bff;
+        outline-offset: 2px;
+    }
+
+    .building-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+    }
+</style>

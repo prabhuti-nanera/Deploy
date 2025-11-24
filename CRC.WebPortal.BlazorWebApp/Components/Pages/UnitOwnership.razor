@@ -1,0 +1,686 @@
+@page "/projects/{ProjectId:int}/ownership"
+@using CRC.WebPortal.Shared.Dtos
+@using CRC.Common.Models
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Unit Ownership - CRC WebPortal</PageTitle>
+
+<style>
+    .btn-xs {
+        padding: 0.25rem 0.4rem;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        border-radius: 0.2rem;
+        min-width: 28px;
+        height: 28px;
+    }
+    
+    .btn-xs i {
+        font-size: 0.7rem !important;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-home me-2"></i>Unit Ownership Details
+                </h2>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item"><a href="/projects">Projects</a></li>
+                        <li class="breadcrumb-item active">Ownership</li>
+                    </ol>
+                </nav>
+            </div>
+
+            @if (project != null)
+            {
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">@project.Name</h5>
+                        <p class="card-text text-muted">@project.Address</p>
+                    </div>
+                </div>
+            }
+
+            <!-- Block Selector -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <label for="blockSelector" class="form-label fw-bold">Select Block:</label>
+                    <select id="blockSelector" class="form-select" @onchange="OnBlockChanged">
+                        <option value="">-- Select Block --</option>
+                        @if (buildings != null)
+                        {
+                            @foreach (var building in buildings)
+                            {
+                                <option value="@building.Id" selected="@(selectedBuildingId == building.Id)">
+                                    @building.Name
+                                </option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-9 d-flex align-items-end">
+                    <!-- Removed Sell Unit and Refresh buttons as requested -->
+                </div>
+            </div>
+
+            <!-- Ownership Table -->
+            @if (selectedBuildingId > 0)
+            {
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-table me-2"></i>
+                            @GetSelectedBuildingName() - Unit Ownership Details
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (isLoading)
+                        {
+                            <div class="text-center p-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Loading ownership details...</p>
+                            </div>
+                        }
+                        else if (units != null && units.Any(u => u.BuildingId == selectedBuildingId))
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Unit</th>
+                                            <th>Status</th>
+                                            <th>Owner</th>
+                                            <th>Mobile</th>
+                                            <th>Email</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var unit in units.Where(u => u.BuildingId == selectedBuildingId).OrderBy(u => u.UnitNumber))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">@unit.UnitNumber</td>
+                                                <td>
+                                                    @if (unit.OwnershipStatus == "Available")
+                                                    {
+                                                        <span class="badge bg-success">Available</span>
+                                                    }
+                                                    else if (unit.OwnershipStatus == "Sold")
+                                                    {
+                                                        <span class="badge bg-danger">Sold</span>
+                                                    }
+                                                    else if (unit.OwnershipStatus == "Booked")
+                                                    {
+                                                        <span class="badge bg-warning">Booked</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">@unit.OwnershipStatus</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (unit.Ownership != null)
+                                                    {
+                                                        @unit.Ownership.OwnerName
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (unit.Ownership != null)
+                                                    {
+                                                        @MaskMobile(unit.Ownership.OwnerMobile)
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (unit.Ownership != null)
+                                                    {
+                                                        @unit.Ownership.OwnerEmail
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex gap-1">
+                                                        @if (unit.Ownership != null)
+                                                        {
+                                                            <button class="btn btn-xs btn-outline-success" @onclick="() => ShowEditOwnershipModal(unit.Ownership.Id, unit.Id)" title="Edit Ownership">
+                                                                <i class="fas fa-edit" style="font-size: 0.75rem;"></i>
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-xs btn-outline-primary" @onclick="() => ShowSellUnitModal(unit.Id)" title="Sell Unit">
+                                                                <i class="fas fa-handshake" style="font-size: 0.75rem;"></i>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center p-4">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No units found for this block</h5>
+                                <p class="text-muted">Units need to be generated first before you can manage ownership.</p>
+                                <a href="/projects/edit/@ProjectId" class="btn btn-primary mt-2">
+                                    <i class="fas fa-cog me-1"></i>Go to Edit Project to Generate Units
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="text-center p-5">
+                    <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">Select a block to view ownership details</h5>
+                    <p class="text-muted">Choose a block from the dropdown above to see unit ownership information.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Edit Ownership Modal -->
+@if (showEditModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-gradient-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Edit Ownership Details
+                        @if (selectedUnitForEdit != null)
+                        {
+                            <span class="text-light">- Unit @selectedUnitForEdit.UnitNumber</span>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <EditForm Model="editOwnershipRequest" OnValidSubmit="UpdateOwnership">
+                        <DataAnnotationsValidator />
+
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Owner Name *</label>
+                                <InputText @bind-Value="editOwnershipRequest.OwnerName" class="form-control" placeholder="Enter owner name" maxlength="100" />
+                                <ValidationMessage For="@(() => editOwnershipRequest.OwnerName)" class="text-danger small" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Mobile Number *</label>
+                                <InputText @bind-Value="editOwnershipRequest.OwnerMobile" class="form-control" placeholder="Enter mobile number" maxlength="20" />
+                                <ValidationMessage For="@(() => editOwnershipRequest.OwnerMobile)" class="text-danger small" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Email Address *</label>
+                                <InputText @bind-Value="editOwnershipRequest.OwnerEmail" class="form-control" placeholder="Enter email address" maxlength="100" />
+                                <ValidationMessage For="@(() => editOwnershipRequest.OwnerEmail)" class="text-danger small" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Price</label>
+                                <InputNumber @bind-Value="editOwnershipRequest.SalePrice" class="form-control" placeholder="Enter sale price" min="0" />
+                                <ValidationMessage For="@(() => editOwnershipRequest.SalePrice)" class="text-danger small" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Date</label>
+                                <InputDate @bind-Value="editOwnershipRequest.SaleDate" class="form-control" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Status</label>
+                                <InputSelect @bind-Value="editOwnershipRequest.SaleStatus" class="form-select">
+                                    <option value="Booked">Booked</option>
+                                    <option value="Sold">Sold</option>
+                                    <option value="Registered">Registered</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Selling Details</label>
+                            <InputTextArea @bind-Value="editOwnershipRequest.SellingDetails" class="form-control" rows="3" placeholder="Enter additional details about the sale" maxlength="500" />
+                            <ValidationMessage For="@(() => editOwnershipRequest.SellingDetails)" class="text-danger small" />
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CloseEditModal">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </button>
+                            <button type="submit" class="btn btn-success" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                <i class="fas fa-save me-1"></i>Update Ownership
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Sell Unit Modal -->
+@if (showSellModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-gradient-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-handshake me-2"></i>Sell Unit
+                        @if (selectedUnitForSale != null)
+                        {
+                            <span class="text-light">- Unit @selectedUnitForSale.UnitNumber</span>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseSellModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <EditForm Model="sellUnitRequest" OnValidSubmit="SellUnit">
+                        <DataAnnotationsValidator />
+
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Owner Name *</label>
+                                <InputText @bind-Value="sellUnitRequest.OwnerName" class="form-control" placeholder="Enter owner name" maxlength="100" />
+                                <ValidationMessage For="@(() => sellUnitRequest.OwnerName)" class="text-danger small" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Mobile Number *</label>
+                                <InputText @bind-Value="sellUnitRequest.OwnerMobile" class="form-control" placeholder="Enter mobile number" maxlength="20" />
+                                <ValidationMessage For="@(() => sellUnitRequest.OwnerMobile)" class="text-danger small" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Email Address *</label>
+                                <InputText @bind-Value="sellUnitRequest.OwnerEmail" class="form-control" placeholder="Enter email address" maxlength="100" />
+                                <ValidationMessage For="@(() => sellUnitRequest.OwnerEmail)" class="text-danger small" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Price</label>
+                                <InputNumber @bind-Value="sellUnitRequest.SalePrice" class="form-control" placeholder="Enter sale price" min="0" />
+                                <ValidationMessage For="@(() => sellUnitRequest.SalePrice)" class="text-danger small" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Date</label>
+                                <InputDate @bind-Value="sellUnitRequest.SaleDate" class="form-control" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Sale Status</label>
+                                <InputSelect @bind-Value="sellUnitRequest.SaleStatus" class="form-select">
+                                    <option value="Booked">Booked</option>
+                                    <option value="Sold">Sold</option>
+                                    <option value="Registered">Registered</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Selling Details</label>
+                            <InputTextArea @bind-Value="sellUnitRequest.SellingDetails" class="form-control" rows="3" placeholder="Enter additional details about the sale" maxlength="500" />
+                            <ValidationMessage For="@(() => sellUnitRequest.SellingDetails)" class="text-danger small" />
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CloseSellModal">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </button>
+                            <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                <i class="fas fa-handshake me-1"></i>Sell Unit
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    private ProjectDto? project;
+    private List<BuildingDto>? buildings;
+    private List<UnitDto>? units;
+    private List<UnitOwnershipDto>? ownerships;
+    private int selectedBuildingId = 0;
+    private bool isLoading = false;
+    private bool showEditModal = false;
+    private bool showSellModal = false;
+    private bool isSubmitting = false;
+
+    private UnitDto? selectedUnitForEdit;
+    private UnitDto? selectedUnitForSale;
+    private CRC.WebPortal.Shared.Dtos.UpdateUnitOwnershipDto editOwnershipRequest = new();
+    private CRC.WebPortal.Shared.Dtos.CreateUnitOwnershipDto sellUnitRequest = new();
+    private int currentOwnershipId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjectData();
+    }
+
+    private async Task LoadProjectData()
+    {
+        try
+        {
+            isLoading = true;
+            
+            // Load project details
+            var response = await Http.GetFromJsonAsync<CRC.Common.Models.BaseResponse<ProjectDto>>($"api/project/{ProjectId}");
+            project = response?.Data;
+            
+            if (project != null)
+            {
+                buildings = project.Buildings;
+                
+                // Only load units if they are actually generated (not empty/default)
+                if (project.GeneratedUnits != null && project.GeneratedUnits.Any())
+                {
+                    // Filter out any units that might be default/placeholder units
+                    units = project.GeneratedUnits.Where(u => 
+                        !string.IsNullOrEmpty(u.UnitNumber) && 
+                        u.Id > 0 && 
+                        u.BuildingId > 0).ToList();
+                }
+                else
+                {
+                    units = new List<UnitDto>(); // Ensure empty list if no units generated
+                }
+                
+                // Auto-select first building if available
+                if (buildings?.Any() == true)
+                {
+                    selectedBuildingId = buildings.First().Id;
+                    await LoadOwnershipData();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading project data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadOwnershipData()
+    {
+        if (selectedBuildingId <= 0) return;
+
+        try
+        {
+            isLoading = true;
+            
+            // Load ownership data for the project
+            var response = await Http.GetFromJsonAsync<BaseResponse<List<UnitOwnershipDto>>>($"api/unitownership/project/{ProjectId}");
+            ownerships = response?.Data ?? new List<UnitOwnershipDto>();
+            
+            // Update units with ownership information
+            if (units != null && ownerships != null)
+            {
+                foreach (var unit in units)
+                {
+                    var ownership = ownerships.FirstOrDefault(o => o.UnitId == unit.Id);
+                    if (ownership != null)
+                    {
+                        unit.Ownership = ownership;
+                        unit.OwnershipStatus = ownership.SaleStatus == "Sold" ? "Sold" : 
+                                             ownership.SaleStatus == "Booked" ? "Booked" : 
+                                             ownership.SaleStatus == "Registered" ? "Registered" : "Available";
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading ownership data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBlockChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int buildingId))
+        {
+            selectedBuildingId = buildingId;
+            await LoadOwnershipData();
+        }
+        else
+        {
+            selectedBuildingId = 0;
+        }
+    }
+
+    private async Task ShowEditOwnershipModal(int ownershipId, int unitId)
+    {
+        try
+        {
+            selectedUnitForEdit = units?.FirstOrDefault(u => u.Id == unitId);
+            currentOwnershipId = ownershipId;
+            
+            // Load current ownership data
+            var ownership = ownerships?.FirstOrDefault(o => o.Id == ownershipId);
+            if (ownership != null)
+            {
+                editOwnershipRequest = new CRC.WebPortal.Shared.Dtos.UpdateUnitOwnershipDto
+                {
+                    Id = ownership.Id,
+                    OwnerName = ownership.OwnerName,
+                    OwnerEmail = ownership.OwnerEmail,
+                    OwnerMobile = ownership.OwnerMobile,
+                    SellingDetails = ownership.SellingDetails,
+                    SalePrice = ownership.SalePrice,
+                    SaleDate = ownership.SaleDate,
+                    SaleStatus = ownership.SaleStatus
+                };
+            }
+            
+            showEditModal = true;
+        }
+        catch (Exception ex)
+        {
+            await ShowSuccessMessage($"Error loading ownership data: {ex.Message}", false);
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedUnitForEdit = null;
+        editOwnershipRequest = new();
+        currentOwnershipId = 0;
+    }
+
+    private async Task ShowSellUnitModal(int unitId)
+    {
+        try
+        {
+            selectedUnitForSale = units?.FirstOrDefault(u => u.Id == unitId);
+            
+            // Initialize with default values
+            sellUnitRequest = new CRC.WebPortal.Shared.Dtos.CreateUnitOwnershipDto
+            {
+                UnitId = unitId,
+                SaleDate = DateTime.Now,
+                SaleStatus = "Sold"
+            };
+            
+            showSellModal = true;
+        }
+        catch (Exception ex)
+        {
+            await ShowSuccessMessage($"Error opening sell modal: {ex.Message}", false);
+        }
+    }
+
+    private void CloseSellModal()
+    {
+        showSellModal = false;
+        selectedUnitForSale = null;
+        sellUnitRequest = new();
+    }
+
+    private async Task SellUnit()
+    {
+        try
+        {
+            isSubmitting = true;
+
+            var response = await Http.PostAsJsonAsync("api/unitownership/assign", sellUnitRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await ShowSuccessMessage("Unit sold successfully!", true);
+                CloseSellModal();
+                await LoadOwnershipData(); // Refresh data
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                await ShowSuccessMessage($"Error selling unit: {error}", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowSuccessMessage($"Error: {ex.Message}", false);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task UpdateOwnership()
+    {
+        try
+        {
+            isSubmitting = true;
+
+            var response = await Http.PutAsJsonAsync($"api/unitownership/{currentOwnershipId}", editOwnershipRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await ShowSuccessMessage("Ownership updated successfully!", true);
+                CloseEditModal();
+                await LoadOwnershipData(); // Refresh data
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                await ShowSuccessMessage($"Error updating ownership: {error}", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowSuccessMessage($"Error: {ex.Message}", false);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+
+    private async Task ShowSuccessMessage(string message, bool isSuccess)
+    {
+        // Create an attractive notification instead of alert
+        var icon = isSuccess ? "✅" : "❌";
+        var color = isSuccess ? "#28a745" : "#dc3545";
+        
+        await JSRuntime.InvokeVoidAsync("eval", $@"
+            const notification = document.createElement('div');
+            notification.innerHTML = '{icon} {message}';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: {color};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 9999;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(notification);
+            
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {{
+                    from {{ transform: translateX(100%); opacity: 0; }}
+                    to {{ transform: translateX(0); opacity: 1; }}
+                }}
+            `;
+            document.head.appendChild(style);
+            
+            setTimeout(() => {{
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }}, 3000);
+        ");
+    }
+
+    private string GetSelectedBuildingName()
+    {
+        return buildings?.FirstOrDefault(b => b.Id == selectedBuildingId)?.Name ?? "Block";
+    }
+
+    private string MaskMobile(string mobile)
+    {
+        if (string.IsNullOrEmpty(mobile) || mobile.Length < 6)
+            return mobile;
+        
+        return mobile.Substring(0, 6) + "****";
+    }
+
+}

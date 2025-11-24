@@ -1,0 +1,26 @@
+@inherits LayoutComponentBase
+@namespace CRC.WebPortal.BlazorWebApp.Layout
+
+<div class="page auth-page">
+    <main class="main-content">
+        @Body
+    </main>
+</div>
+
+<style>
+    .page.auth-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        margin: 0;
+    }
+
+    .page.auth-page .main-content {
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+        margin: 0;
+    }
+</style>

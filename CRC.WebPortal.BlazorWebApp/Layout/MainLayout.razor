@@ -1,0 +1,114 @@
+@inherits LayoutComponentBase
+@namespace CRC.WebPortal.BlazorWebApp.Layout
+@using Microsoft.AspNetCore.Components.Authorization
+@using CRC.WebPortal.BlazorWebApp.Services
+@using CRC.WebPortal.BlazorWebApp.Components.Shared
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="page">
+    <header class="main-header">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col">
+                    <div class="logo">
+                        <h4 class="mb-0">CRC WebPortal</h4>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <AuthorizeView>
+                        <Authorized>
+                            <div class="d-flex align-items-center">
+                                <span class="me-3">Welcome, @GetUserName(context.User)!</span>
+                                <button class="btn btn-outline-danger btn-sm" @onclick="HandleLogout">
+                                    <i class="bi bi-box-arrow-right me-1"></i>
+                                    Logout
+                                </button>
+                            </div>
+                        </Authorized>
+                    </AuthorizeView>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="main-content">
+        @Body
+    </main>
+</div>
+
+<!-- Toast Notifications -->
+<ToastContainer />
+
+<style>
+    .page {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .main-header {
+        background: white;
+        border-bottom: 1px solid #dee2e6;
+        padding: 12px 0;
+        position: sticky;
+        top: 0;
+        z-index: 1040;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .logo h4 {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .main-content {
+        flex: 1;
+        padding-top: 0;
+    }
+
+    /* Hide header on auth pages */
+    .page.auth-page .main-header {
+        display: none;
+    }
+
+    .page.auth-page .main-content {
+        padding-top: 0;
+    }
+</style>
+
+@code {
+    private string GetUserName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var firstName = user.FindFirst("FirstName")?.Value;
+        if (!string.IsNullOrEmpty(firstName))
+        {
+            return firstName;
+        }
+        
+        var email = user.FindFirst("email")?.Value;
+        return email?.Split('@')[0] ?? "User";
+    }
+
+    private async Task HandleLogout()
+    {
+        try
+        {
+            await AuthService.LogoutAsync();
+            StateHasChanged(); // Ensure UI updates
+            await Task.Delay(100); // Small delay to prevent event handler issues
+            Navigation.NavigateTo("/signin", forceLoad: true);
+        }
+        catch (Exception)
+        {
+            // Silent error handling for logout
+            StateHasChanged();
+            await Task.Delay(100);
+            Navigation.NavigateTo("/signin", forceLoad: true);
+        }
+    }
+}

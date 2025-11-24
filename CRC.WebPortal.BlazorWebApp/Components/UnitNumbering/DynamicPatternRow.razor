@@ -1,0 +1,370 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+
+<div class="pattern-row">
+    <!-- Header Row with Unit Type, Result, and Delete Button -->
+    <div class="row g-2 align-items-center mb-2">
+        <!-- Unit Type Column -->
+        <div class="col-md-4">
+            <label class="form-label small fw-semibold text-dark">Unit Type</label>
+            <select class="form-select form-select-sm shadow-sm border-primary" 
+                    @bind="localRow.UnitType" 
+                    @bind:after="NotifyChange">
+                <option value="">Select Type</option>
+                @foreach (var unitType in GetAvailableUnitTypes())
+                {
+                    <option value="@unitType">@unitType</option>
+                }
+            </select>
+        </div>
+
+        <!-- Result Column -->
+        <div class="col-md-6">
+            <label class="form-label small fw-semibold text-dark">Preview Result</label>
+            <div class="result-preview p-2 bg-success bg-opacity-10 border border-success rounded shadow-sm">
+                <small class="text-success fw-bold">@localRow.Result</small>
+            </div>
+        </div>
+
+        <!-- Delete Button Column -->
+        <div class="col-md-2 text-end">
+            <label class="form-label small">&nbsp;</label>
+            <button type="button" class="btn btn-outline-danger btn-sm pattern-delete-btn" 
+                    @onclick="HandleDelete" @onclick:stopPropagation="true" 
+                    @onclick:preventDefault="true" title="Delete Row">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Digits Configuration Section -->
+    <div class="digits-section">
+        <div class="digits-header mb-2">
+            <small class="text-muted fw-semibold">
+                <i class="fas fa-cogs me-1"></i>Digit Configuration (@GetEffectiveDigitCount() digits)
+            </small>
+        </div>
+        
+        <!-- Dynamic Digit Columns with better responsive layout -->
+        <div class="digits-grid">
+            @for (int i = 0; i < GetEffectiveDigitCount(); i++)
+            {
+                var digitIndex = i; // Capture for closure
+                <div class="digit-item">
+                    <label class="form-label small fw-semibold text-dark">@GetDigitLabel(digitIndex + 1)</label>
+                    <select class="form-select form-select-sm shadow-sm border-secondary digit-dropdown" 
+                            value="@localRow.GetDigit(digitIndex)"
+                            @onchange="(e) => OnDigitChanged(digitIndex, e.Value?.ToString() ?? string.Empty)">
+                        <option value="">Select</option>
+                        <option value="Floor No.">Floor No.</option>
+                        <option value="Unit No.">Unit No.</option>
+                        <option value="/">/</option>
+                        <option value="-">-</option>
+                        <option value=" ">Space</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Custom input fields (shown when Custom is selected) -->
+    @if (HasCustomDigits())
+    {
+        <div class="custom-inputs-section mt-3">
+            <div class="custom-inputs-header mb-2">
+                <small class="text-muted fw-semibold">
+                    <i class="fas fa-edit me-1"></i>Custom Values
+                </small>
+            </div>
+            <div class="custom-inputs-grid">
+                @for (int i = 0; i < GetEffectiveDigitCount(); i++)
+                {
+                    var digitIndex = i;
+                    @if (localRow.GetDigit(digitIndex) == "Custom")
+                    {
+                        <div class="custom-input-item">
+                            <label class="form-label small fw-semibold text-dark">Custom @(digitIndex + 1)</label>
+                            <input type="text" class="form-control form-control-sm shadow-sm border-warning custom-input" 
+                                   value="@localRow.GetCustomDigit(digitIndex)"
+                                   @oninput="(e) => OnCustomDigitChanged(digitIndex, e.Value?.ToString() ?? string.Empty)"
+                                   @onblur="NotifyChange"
+                                   maxlength="5"
+                                   placeholder="Enter custom value" />
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public UnitNameDisplay Row { get; set; } = new();
+    [Parameter] public EventCallback<UnitNameDisplay> RowChanged { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public List<string> UnitTypes { get; set; } = new();
+    [Parameter] public List<string> UsedUnitTypes { get; set; } = new();
+    [Parameter] public int DigitCount { get; set; } = 3;
+
+    private UnitNameDisplay localRow = new();
+
+    protected override void OnParametersSet()
+    {
+        localRow = new UnitNameDisplay
+        {
+            UnitType = Row.UnitType,
+            Type = Row.Type,
+            Result = Row.Result,
+            OriginalDigitCount = Row.OriginalDigitCount
+        };
+
+        // Initialize digits if needed
+        var targetDigitCount = Row.OriginalDigitCount > 0 ? Row.OriginalDigitCount : DigitCount;
+        if (localRow.Digits.Count != targetDigitCount)
+        {
+            localRow.InitializeDigits(targetDigitCount);
+        }
+
+        // Copy existing digit values from both dynamic and legacy properties
+        for (int i = 0; i < Math.Min(targetDigitCount, Row.Digits.Count); i++)
+        {
+            localRow.SetDigit(i, Row.GetDigit(i));
+            localRow.SetCustomDigit(i, Row.GetCustomDigit(i));
+        }
+        
+        // Also copy from legacy properties if dynamic digits are empty
+        if (targetDigitCount >= 1 && string.IsNullOrEmpty(localRow.GetDigit(0)) && !string.IsNullOrEmpty(Row.FirstDigit))
+            localRow.SetDigit(0, Row.FirstDigit);
+        if (targetDigitCount >= 2 && string.IsNullOrEmpty(localRow.GetDigit(1)) && !string.IsNullOrEmpty(Row.SecondDigit))
+            localRow.SetDigit(1, Row.SecondDigit);
+        if (targetDigitCount >= 3 && string.IsNullOrEmpty(localRow.GetDigit(2)) && !string.IsNullOrEmpty(Row.ThirdDigit))
+            localRow.SetDigit(2, Row.ThirdDigit);
+            
+        // Copy legacy custom digits
+        if (targetDigitCount >= 1 && string.IsNullOrEmpty(localRow.GetCustomDigit(0)) && !string.IsNullOrEmpty(Row.CustomFirstDigit))
+            localRow.SetCustomDigit(0, Row.CustomFirstDigit);
+        if (targetDigitCount >= 2 && string.IsNullOrEmpty(localRow.GetCustomDigit(1)) && !string.IsNullOrEmpty(Row.CustomSecondDigit))
+            localRow.SetCustomDigit(1, Row.CustomSecondDigit);
+        if (targetDigitCount >= 3 && string.IsNullOrEmpty(localRow.GetCustomDigit(2)) && !string.IsNullOrEmpty(Row.CustomThirdDigit))
+            localRow.SetCustomDigit(2, Row.CustomThirdDigit);
+    }
+
+    private async Task NotifyChange()
+    {
+        try
+        {
+            await RowChanged.InvokeAsync(localRow);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in DynamicPatternRow NotifyChange: {ex.Message}");
+        }
+    }
+
+    private async Task OnDigitChanged(int index, string value)
+    {
+        localRow.SetDigit(index, value);
+        await NotifyChange();
+    }
+
+    private async Task OnCustomDigitChanged(int index, string value)
+    {
+        localRow.SetCustomDigit(index, value);
+        await NotifyChange();
+    }
+    
+    private async Task HandleDelete()
+    {
+        try
+        {
+            if (OnDelete.HasDelegate)
+            {
+                await OnDelete.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Delete error: {ex.Message}");
+        }
+    }
+
+    private string GetDigitLabel(int digitNumber)
+    {
+        return $"Digit {digitNumber}";
+    }
+
+    private int GetEffectiveDigitCount()
+    {
+        // Use the row's original digit count if available, otherwise use current parameter
+        if (localRow.OriginalDigitCount > 0)
+            return localRow.OriginalDigitCount;
+        return localRow.Digits.Count > 0 ? localRow.Digits.Count : DigitCount;
+    }
+    
+    private bool HasCustomDigits()
+    {
+        for (int i = 0; i < GetEffectiveDigitCount(); i++)
+        {
+            if (localRow.GetDigit(i) == "Custom")
+                return true;
+        }
+        return false;
+    }
+
+    private List<string> GetAvailableUnitTypes()
+    {
+        return UnitTypes.Where(ut => !UsedUnitTypes.Contains(ut) || ut == localRow.UnitType).ToList();
+    }
+}
+
+<style>
+    .pattern-row {
+        padding: 15px;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        background-color: #fff;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .pattern-row:hover {
+        border-color: #007bff;
+        background-color: #f8f9ff;
+        box-shadow: 0 2px 6px rgba(0,123,255,0.15);
+    }
+
+    .digits-section {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 12px;
+        border: 1px solid #e9ecef;
+    }
+
+    .digits-header {
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+    }
+
+    .digits-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        align-items: start;
+    }
+
+    /* Responsive grid adjustments */
+    @@media (max-width: 768px) {
+        .digits-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+    }
+
+    @@media (min-width: 992px) {
+        .digits-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+    }
+
+    .digit-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .digit-item .form-label {
+        margin-bottom: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .digit-dropdown {
+        min-width: 120px;
+        font-size: 0.85rem;
+    }
+
+    .result-preview {
+        font-weight: 600;
+        color: #28a745;
+        font-size: 1em;
+        text-align: center;
+        padding: 8px;
+        background-color: #f0f8f0;
+        border-radius: 4px;
+        border: 1px solid #c3e6cb;
+        min-height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .form-label.small {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 3px;
+    }
+
+    .pattern-delete-btn {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+        min-width: 32px;
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+    }
+
+    .pattern-delete-btn:hover {
+        transform: scale(1.05);
+        background-color: #dc3545 !important;
+        color: white !important;
+        border-color: #dc3545 !important;
+    }
+
+    .custom-inputs-section {
+        background-color: #fff8e1;
+        border-radius: 6px;
+        padding: 12px;
+        border: 1px solid #ffc107;
+    }
+
+    .custom-inputs-header {
+        border-bottom: 1px solid #ffc107;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+    }
+
+    .custom-inputs-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .custom-input-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .custom-input-item .form-label {
+        margin-bottom: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .custom-input {
+        font-size: 0.85rem;
+        padding: 6px 8px;
+        min-width: 120px;
+    }
+</style>

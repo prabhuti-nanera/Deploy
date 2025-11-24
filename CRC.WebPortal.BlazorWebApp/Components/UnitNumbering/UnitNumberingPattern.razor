@@ -1,0 +1,359 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.BlazorWebApp.Components.UnitTypes
+@using CRC.WebPortal.BlazorWebApp.Components.Buildings
+@using CRC.WebPortal.BlazorWebApp.Components.UnitNumbering
+@using CRC.WebPortal.Shared.Dtos
+
+<div class="unit-numbering-pattern">
+    <!-- Header -->
+    <div class="pattern-header">
+        <h5 class="mb-0">Project Configuration</h5>
+        <small class="text-muted">Define unit types, buildings, and numbering patterns</small>
+    </div>
+
+    <!-- Balanced Two Column Layout -->
+    <div class="row g-4">
+        <!-- Left Column: Configuration (50%) -->
+        <div class="col-lg-6">
+            <!-- Unit Types Section -->
+            <div class="section-card mb-4">
+                <CRC.WebPortal.BlazorWebApp.Components.UnitTypes.UnitTypeLocalManager UnitTypes="ConvertToUnitTypeDtos()" 
+                                       UnitTypesChanged="OnUnitTypeDtosChanged" 
+                                       ProjectId="0" />
+            </div>
+
+            <!-- Building Configuration Section -->
+            <div class="section-card mb-4">
+                <CRC.WebPortal.BlazorWebApp.Components.Buildings.BuildingManager Buildings="Buildings" 
+                                       BuildingsChanged="OnBuildingsChanged" />
+            </div>
+
+            <!-- Unit Number Pattern Section -->
+            <div class="section-card">
+                <CRC.WebPortal.BlazorWebApp.Components.UnitNumbering.NumberingPatternBuilder 
+                    PatternConfig="UnitNumberPatternConfig"
+                    PatternConfigChanged="OnPatternConfigChanged"
+                    OnUnitsGenerated="OnUnitsGenerated"
+                    UnitTypes="UnitTypes"
+                    AvailableBuildings="GetBuildingNames()" />
+            </div>
+        </div>
+
+        <!-- Right Column: Preview (50%) -->
+        <div class="col-lg-6">
+            <!-- Generated Units Preview -->
+            <div class="section-card">
+                <CRC.WebPortal.BlazorWebApp.Components.UnitNumbering.UnitPreview 
+                    Units="GeneratedUnits"
+                    UnitsChanged="OnUnitsChanged"
+                    Buildings="Buildings"
+                    UnitTypes="UnitTypes"
+                    PatternConfig="UnitNumberPatternConfig"
+                    ProjectId="@ProjectId" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Models.UnitNumberingPattern NumberingPattern { get; set; } = new();
+    [Parameter] public EventCallback<Models.UnitNumberingPattern> NumberingPatternChanged { get; set; }
+    [Parameter] public List<string> UnitTypes { get; set; } = new();
+    [Parameter] public EventCallback<List<string>> UnitTypesChanged { get; set; }
+    [Parameter] public List<Models.CreateBuildingRequest> Buildings { get; set; } = new();
+    [Parameter] public EventCallback<List<Models.CreateBuildingRequest>> BuildingsChanged { get; set; }
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public List<CRC.WebPortal.Shared.Dtos.UnitDto> GeneratedUnits { get; set; } = new();
+    [Parameter] public EventCallback<List<CRC.WebPortal.Shared.Dtos.UnitDto>> GeneratedUnitsChanged { get; set; }
+
+    private NumberingPatternBuilder.UnitNumberPatternConfig UnitNumberPatternConfig = new();
+
+    protected override void OnParametersSet()
+    {
+        // Initialize UnitNumberPatternConfig from NumberingPattern parameter (for edit mode)
+        if (NumberingPattern != null && UnitNumberPatternConfig.PatternRows.Count == 0)
+        {
+            UnitNumberPatternConfig.StartFloorNumber = NumberingPattern.StartFloorNumber;
+            UnitNumberPatternConfig.UnitNameDigits = NumberingPattern.UnitNameDigits;
+            UnitNumberPatternConfig.ApplyTo = NumberingPattern.ApplyTo;
+            
+            // Convert UnitNameDisplays to PatternRows
+            if (NumberingPattern.UnitNameDisplays?.Any() == true)
+            {
+                UnitNumberPatternConfig.PatternRows = NumberingPattern.UnitNameDisplays.ToList();
+            }
+        }
+    }
+
+    private List<UnitTypeDto> ConvertToUnitTypeDtos()
+    {
+        return UnitTypes.Select((name, index) => new UnitTypeDto
+        {
+            Id = index + 1,
+            Name = name,
+            Description = string.Empty,
+            DisplayOrder = index + 1,
+            ProjectId = 0
+        }).ToList();
+    }
+
+    private async Task OnUnitTypeDtosChanged(List<UnitTypeDto> unitTypeDtos)
+    {
+        try
+        {
+            var unitTypeNames = unitTypeDtos.Select(ut => ut.Name).ToList();
+            UnitTypes = unitTypeNames; // Update local copy
+            await UnitTypesChanged.InvokeAsync(unitTypeNames);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnUnitTypeDtosChanged: {ex.Message}");
+        }
+    }
+
+
+    private async Task OnBuildingsChanged(List<Models.CreateBuildingRequest> buildings)
+    {
+        Buildings = buildings;
+        await BuildingsChanged.InvokeAsync(buildings);
+        await NotifyChanged();
+    }
+
+    private List<string> GetBuildingNames()
+    {
+        return Buildings.Select(b => b.Name).Where(name => !string.IsNullOrEmpty(name)).ToList();
+    }
+
+    private async Task OnPatternConfigChanged(NumberingPatternBuilder.UnitNumberPatternConfig config)
+    {
+        UnitNumberPatternConfig = config;
+        await NotifyChanged();
+    }
+
+    private void OnUnitsGenerated(NumberingPatternBuilder.UnitNumberPatternConfig config)
+    {
+        GeneratedUnits.Clear();
+        int unitId = 1;
+        
+        var validRows = config.PatternRows.Where(r => !string.IsNullOrEmpty(r.UnitType)).ToList();
+        if (!validRows.Any()) return;
+        
+        var buildingsToProcess = config.ApplyTo == "All" ? GetBuildingNames() : new List<string> { config.ApplyTo };
+        
+        foreach (var buildingName in buildingsToProcess)
+        {
+            var building = Buildings.FirstOrDefault(b => b.Name == buildingName);
+            if (building != null)
+            {
+                // Generate units for each floor and unit per floor
+                for (int floor = config.StartFloorNumber; floor < config.StartFloorNumber + building.Floors; floor++)
+                {
+                    for (int unit = 1; unit <= building.UnitsPerFloor; unit++)
+                    {
+                        // Cycle through unit types for different positions
+                        var rowIndex = (unit - 1) % validRows.Count;
+                        var row = validRows[rowIndex];
+                        
+                        // Generate unique unit number by incorporating building and position
+                        var unitNumber = GenerateUniqueUnitNumber(row, floor, unit, config, buildingName);
+                        
+                        GeneratedUnits.Add(new CRC.WebPortal.Shared.Dtos.UnitDto
+                        {
+                            Id = unitId++,
+                            UnitNumber = unitNumber,
+                            UnitType = row.UnitType,
+                            FloorNumber = floor,
+                            BuildingName = buildingName,
+                            ProjectId = 0,
+                            Position = unit
+                        });
+                    }
+                }
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private string GenerateUnitNumber(UnitNameDisplay row, int floor, int unit, NumberingPatternBuilder.UnitNumberPatternConfig config, int rowIndex = 0)
+    {
+        var unitNumber = "";
+        
+        // Process each digit based on the row's configuration
+        var digitCount = row.OriginalDigitCount > 0 ? row.OriginalDigitCount : Math.Max(row.Digits.Count, 1);
+        
+        for (int i = 0; i < digitCount; i++)
+        {
+            var digit = row.GetDigit(i);
+            
+            if (digit == "Floor No.")
+            {
+                unitNumber += floor.ToString();
+            }
+            else if (digit == "Unit No.")
+            {
+                // Use actual unit position to ensure uniqueness
+                // Format unit number with appropriate padding
+                if (i == 1) // Second digit typically gets 2-digit padding
+                    unitNumber += unit.ToString("D2");
+                else
+                    unitNumber += unit.ToString();
+            }
+            else if (digit == "Custom")
+            {
+                var customValue = row.GetCustomDigit(i);
+                if (!string.IsNullOrEmpty(customValue))
+                {
+                    unitNumber += customValue;
+                }
+            }
+            else if (digit == " ")
+            {
+                unitNumber += " ";
+            }
+            else if (!string.IsNullOrEmpty(digit))
+            {
+                unitNumber += digit;
+            }
+        }
+        
+        // Don't pad with zeros if we have a meaningful unit number
+        return string.IsNullOrEmpty(unitNumber) ? "000" : unitNumber;
+    }
+
+    private string GenerateUniqueUnitNumber(UnitNameDisplay row, int floor, int unit, NumberingPatternBuilder.UnitNumberPatternConfig config, string buildingName)
+    {
+        // Always use the actual unit position to ensure uniqueness
+        // This prevents duplicates when multiple pattern rows have similar configurations
+        var unitNumber = "";
+        
+        // Process each digit based on the row's configuration
+        var digitCount = row.OriginalDigitCount > 0 ? row.OriginalDigitCount : Math.Max(row.Digits.Count, 1);
+        
+        for (int i = 0; i < digitCount; i++)
+        {
+            var digit = row.GetDigit(i);
+            
+            if (digit == "Floor No.")
+            {
+                unitNumber += floor.ToString();
+            }
+            else if (digit == "Unit No.")
+            {
+                // Always use the actual unit position for uniqueness
+                if (i == 1) // Second digit typically gets 2-digit padding
+                    unitNumber += unit.ToString("D2");
+                else
+                    unitNumber += unit.ToString();
+            }
+            else if (digit == "Custom")
+            {
+                var customValue = row.GetCustomDigit(i);
+                if (!string.IsNullOrEmpty(customValue))
+                {
+                    unitNumber += customValue;
+                }
+            }
+            else if (digit == " ")
+            {
+                unitNumber += " ";
+            }
+            else if (digit == "-")
+            {
+                unitNumber += "-";
+            }
+            else if (!string.IsNullOrEmpty(digit))
+            {
+                unitNumber += digit;
+            }
+        }
+        
+        // Fallback: if unit number is still empty or potentially duplicate, use floor-unit format
+        if (string.IsNullOrEmpty(unitNumber))
+        {
+            unitNumber = $"{floor}{unit:D2}";
+        }
+        
+        return unitNumber;
+    }
+
+    private async Task OnUnitsChanged(List<CRC.WebPortal.Shared.Dtos.UnitDto> units)
+    {
+        GeneratedUnits = units;
+        await GeneratedUnitsChanged.InvokeAsync(units);
+        StateHasChanged();
+    }
+
+    private async Task NotifyChanged()
+    {
+        // Sync UnitNumberPatternConfig changes back to NumberingPattern
+        if (NumberingPattern != null)
+        {
+            NumberingPattern.StartFloorNumber = UnitNumberPatternConfig.StartFloorNumber;
+            NumberingPattern.UnitNameDigits = UnitNumberPatternConfig.UnitNameDigits;
+            NumberingPattern.ApplyTo = UnitNumberPatternConfig.ApplyTo;
+            
+            // Sync pattern rows and ensure legacy properties are populated
+            NumberingPattern.UnitNameDisplays = UnitNumberPatternConfig.PatternRows.Select(row => 
+            {
+                var display = new Models.UnitNameDisplay
+                {
+                    UnitType = row.UnitType,
+                    Type = row.Type,
+                    Result = row.Result,
+                    Digits = row.Digits,
+                    CustomDigits = row.CustomDigits,
+                    OriginalDigitCount = row.OriginalDigitCount,
+                    // Copy dynamic digits to legacy properties for API compatibility
+                    FirstDigit = row.GetDigit(0),
+                    SecondDigit = row.GetDigit(1),
+                    ThirdDigit = row.GetDigit(2),
+                    CustomFirstDigit = row.GetCustomDigit(0),
+                    CustomSecondDigit = row.GetCustomDigit(1),
+                    CustomThirdDigit = row.GetCustomDigit(2)
+                };
+                return display;
+            }).ToList();
+        }
+        
+        await NumberingPatternChanged.InvokeAsync(NumberingPattern);
+        StateHasChanged();
+    }
+}
+
+<style>
+    .unit-numbering-pattern {
+        padding: 20px;
+    }
+
+    .pattern-header {
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .pattern-header h5 {
+        color: #333;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .section-card {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .section-card > * {
+        border-radius: 8px;
+    }
+
+    @@media (max-width: 992px) {
+        .col-lg-6 {
+            margin-bottom: 1rem;
+        }
+    }
+</style>

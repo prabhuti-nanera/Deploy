@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <!-- Suppress NuGet security warnings for Microsoft.Build packages -->
+    <!-- These are design-time only dependencies from EF Core Design tools -->
+    <!-- The vulnerabilities don't affect runtime security -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <WarningsAsErrors />
+    <WarningsNotAsErrors>NU1903</WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>

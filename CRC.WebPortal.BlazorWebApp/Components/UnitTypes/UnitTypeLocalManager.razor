@@ -1,0 +1,488 @@
+@using CRC.WebPortal.Shared.Dtos
+@using CRC.WebPortal.BlazorWebApp.Services
+@inject IToastService ToastService
+
+<div class="unit-type-local-manager">
+    <div class="form-header">
+        <h6 class="mb-2">🏠 Unit Types</h6>
+    </div>
+
+    <!-- Input field for adding unit types -->
+    <div class="unit-type-input-container mb-3">
+        <input type="text" 
+               class="form-control unit-type-input-field" 
+               @bind="newUnitTypeInput"
+               @onkeypress="OnInputKeyPress"
+               placeholder="e.g., 1 BHK, 2 BHK, Studio" />
+        <button type="button" 
+                class="btn unit-type-add-btn" 
+                @onclick="AddFromInput">
+            +
+        </button>
+    </div>
+    
+    <!-- Unit type tags with edit functionality -->
+    <div class="unit-type-tags-container">
+        @foreach (var (unitType, index) in LocalUnitTypes.Select((ut, i) => (ut, i)))
+        {
+            <div class="unit-type-tag @(editingIndex == index ? "editing" : "")" 
+                 @onmouseenter="() => hoveredIndex = index"
+                 @onmouseleave="() => hoveredIndex = -1">
+                
+                @if (editingIndex == index)
+                {
+                    <!-- Edit mode -->
+                    <input type="text" 
+                           class="edit-input" 
+                           @bind="editingName"
+                           @bind:event="oninput"
+                           @onkeypress="(e) => OnEditKeyPress(e, index)"
+                           @ref="editInputRef" />
+                    <div class="edit-actions">
+                        <button type="button" 
+                                class="btn-save" 
+                                @onclick="() => SaveEdit(index)"
+                                title="Save">
+                            <i class="bi bi-check"></i>
+                        </button>
+                        <button type="button" 
+                                class="btn-cancel" 
+                                @onclick="CancelEdit"
+                                title="Cancel">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <!-- Display mode -->
+                    <span class="unit-type-name">@unitType</span>
+                    
+                    @if (hoveredIndex == index)
+                    {
+                        <div class="hover-actions">
+                            <button type="button" 
+                                    class="btn-edit" 
+                                    @onclick="() => StartEdit(index)"
+                                    title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" 
+                                    class="btn-delete" 
+                                    @onclick="() => HandleDelete(index)"
+                                    title="Remove">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    @if (!LocalUnitTypes.Any())
+    {
+        <div class="no-unit-types">
+            <i class="bi bi-info-circle"></i>
+            <span>No unit types added yet.</span>
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter] public List<UnitTypeDto> UnitTypes { get; set; } = new();
+    [Parameter] public EventCallback<List<UnitTypeDto>> UnitTypesChanged { get; set; }
+    [Parameter] public int? ProjectId { get; set; }
+
+    private List<string> LocalUnitTypes = new();
+    private string newUnitTypeInput = string.Empty;
+
+    // Edit functionality
+    private int editingIndex = -1;
+    private int hoveredIndex = -1;
+    private string editingName = string.Empty;
+    private ElementReference editInputRef;
+
+
+    protected override void OnInitialized()
+    {
+        // Initialize local unit types from the parameter
+        LocalUnitTypes = UnitTypes.Select(ut => ut.Name).ToList();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Update local unit types when parameters change
+        LocalUnitTypes = UnitTypes.Select(ut => ut.Name).ToList();
+    }
+
+    private async Task OnInputKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newUnitTypeInput))
+        {
+            await AddFromInput();
+        }
+    }
+
+    private async Task AddFromInput()
+    {
+        if (!string.IsNullOrWhiteSpace(newUnitTypeInput))
+        {
+            await HandleAdd(newUnitTypeInput.Trim());
+            newUnitTypeInput = string.Empty;
+        }
+    }
+
+    private async Task HandleAdd(string unitTypeName)
+    {
+        try
+        {
+            // Check for duplicates
+            if (LocalUnitTypes.Any(ut => ut.Equals(unitTypeName, StringComparison.OrdinalIgnoreCase)))
+            {
+                await ToastService.ShowWarningAsync($"Unit type '{unitTypeName}' already exists.");
+                return;
+            }
+
+            // Add to local list
+            LocalUnitTypes.Add(unitTypeName);
+            
+            // Convert back to DTOs and notify parent
+            await NotifyParentOfChanges();
+            
+            await ToastService.ShowSuccessAsync($"Unit type '{unitTypeName}' added successfully.");
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync($"Error adding unit type: {ex.Message}");
+        }
+    }
+
+    private async Task StartEdit(int index)
+    {
+        editingIndex = index;
+        editingName = LocalUnitTypes[index];
+        StateHasChanged();
+        
+        // Focus the input after the next render
+        await Task.Delay(10);
+        await editInputRef.FocusAsync();
+    }
+
+    private async Task OnEditKeyPress(KeyboardEventArgs e, int index)
+    {
+        if (e.Key == "Enter")
+        {
+            await SaveEdit(index);
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelEdit();
+        }
+    }
+
+    private async Task SaveEdit(int index)
+    {
+        try
+        {
+            Console.WriteLine($"SaveEdit called for index {index} with editingName: '{editingName}'");
+            
+            if (string.IsNullOrWhiteSpace(editingName))
+            {
+                await ToastService.ShowWarningAsync("Unit type name cannot be empty.");
+                return;
+            }
+
+            var newName = editingName.Trim();
+            Console.WriteLine($"Trimmed newName: '{newName}'");
+
+            // Check for duplicates (excluding current item)
+            if (LocalUnitTypes.Where((ut, i) => i != index).Any(ut => ut.Equals(newName, StringComparison.OrdinalIgnoreCase)))
+            {
+                await ToastService.ShowWarningAsync($"Unit type '{newName}' already exists.");
+                return;
+            }
+
+            var oldName = LocalUnitTypes[index];
+            Console.WriteLine($"Updating from '{oldName}' to '{newName}'");
+            
+            LocalUnitTypes[index] = newName;
+            Console.WriteLine($"LocalUnitTypes[{index}] is now: '{LocalUnitTypes[index]}'");
+            
+            // Reset edit state first
+            editingIndex = -1;
+            editingName = string.Empty;
+            
+            // Force UI update
+            StateHasChanged();
+            
+            // Notify parent of changes
+            await NotifyParentOfChanges();
+            
+            await ToastService.ShowSuccessAsync($"Unit type renamed from '{oldName}' to '{newName}'.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in SaveEdit: {ex.Message}");
+            await ToastService.ShowErrorAsync($"Error updating unit type: {ex.Message}");
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingIndex = -1;
+        editingName = string.Empty;
+        StateHasChanged();
+    }
+
+
+    private async Task HandleDelete(int index)
+    {
+        try
+        {
+            var unitTypeName = LocalUnitTypes[index];
+            LocalUnitTypes.RemoveAt(index);
+            
+            // Reset edit state if we were editing this item
+            if (editingIndex == index)
+            {
+                editingIndex = -1;
+                editingName = string.Empty;
+            }
+            else if (editingIndex > index)
+            {
+                editingIndex--; // Adjust index after removal
+            }
+            
+            // Notify parent of changes
+            await NotifyParentOfChanges();
+            
+            await ToastService.ShowSuccessAsync($"Unit type '{unitTypeName}' removed successfully.");
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync($"Error removing unit type: {ex.Message}");
+        }
+    }
+
+    private async Task NotifyParentOfChanges()
+    {
+        try
+        {
+            // Convert local strings back to DTOs
+            var updatedUnitTypes = LocalUnitTypes.Select((name, index) => new UnitTypeDto
+            {
+                Id = index + 1,
+                Name = name,
+                Description = string.Empty,
+                DisplayOrder = index + 1,
+                ProjectId = ProjectId ?? 0,
+                IsActive = true,
+                CreatedAt = DateTime.Now
+            }).ToList();
+
+            await UnitTypesChanged.InvokeAsync(updatedUnitTypes);
+            
+            // Force UI update
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in NotifyParentOfChanges: {ex.Message}");
+            await ToastService.ShowErrorAsync($"Error updating unit types: {ex.Message}");
+        }
+    }
+}
+
+<style>
+    .unit-type-local-manager {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+
+    .form-header {
+        margin-bottom: 20px;
+    }
+
+    .form-header h6 {
+        color: #333;
+        font-weight: 600;
+        margin: 0;
+        font-size: 18px;
+    }
+
+    .unit-type-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .unit-type-input-field {
+        flex: 1;
+        padding: 12px 16px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #fff;
+        transition: border-color 0.2s ease;
+    }
+
+    .unit-type-input-field:focus {
+        outline: none;
+        border-color: #4285f4;
+        box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+    }
+
+    .unit-type-add-btn {
+        width: 48px;
+        height: 48px;
+        background: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 20px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .unit-type-add-btn:hover {
+        background: #3367d6;
+        transform: translateY(-1px);
+    }
+
+    .unit-type-tags-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
+    .unit-type-tag {
+        display: flex;
+        align-items: center;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 20px;
+        padding: 8px 12px;
+        font-size: 14px;
+        gap: 8px;
+        position: relative;
+        transition: all 0.2s ease;
+        min-height: 36px;
+    }
+
+    .unit-type-tag:hover {
+        background: #e9ecef;
+        border-color: #dee2e6;
+    }
+
+    .unit-type-tag.editing {
+        background: #fff;
+        border-color: #4285f4;
+        box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+    }
+
+    .unit-type-name {
+        color: #495057;
+        font-weight: 500;
+    }
+
+    .edit-input {
+        border: none;
+        background: transparent;
+        outline: none;
+        font-size: 14px;
+        font-weight: 500;
+        color: #495057;
+        padding: 0;
+        margin: 0;
+        width: 100px;
+        min-width: 80px;
+    }
+
+    .hover-actions {
+        display: flex;
+        gap: 4px;
+        margin-left: 4px;
+    }
+
+    .edit-actions {
+        display: flex;
+        gap: 4px;
+        margin-left: 8px;
+    }
+
+    .btn-edit, .btn-delete, .btn-save, .btn-cancel {
+        background: none;
+        border: none;
+        padding: 4px;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 12px;
+    }
+
+    .btn-edit {
+        color: #6c757d;
+    }
+
+    .btn-edit:hover {
+        background: #4285f4;
+        color: white;
+    }
+
+    .btn-delete {
+        color: #6c757d;
+    }
+
+    .btn-delete:hover {
+        background: #dc3545;
+        color: white;
+    }
+
+    .btn-save {
+        color: #28a745;
+    }
+
+    .btn-save:hover {
+        background: #28a745;
+        color: white;
+    }
+
+    .btn-cancel {
+        color: #6c757d;
+    }
+
+    .btn-cancel:hover {
+        background: #6c757d;
+        color: white;
+    }
+
+    .no-unit-types {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #6c757d;
+        font-style: italic;
+        font-size: 14px;
+        padding: 16px;
+        text-align: center;
+        justify-content: center;
+        margin-top: 16px;
+    }
+
+</style>

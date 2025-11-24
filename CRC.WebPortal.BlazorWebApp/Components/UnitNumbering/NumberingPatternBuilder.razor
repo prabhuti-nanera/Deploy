@@ -1,0 +1,476 @@
+@using CRC.WebPortal.BlazorWebApp.Models
+
+<div class="numbering-pattern-builder">
+    <div class="pattern-header">
+        <h6 class="mb-3">🔢 Unit Numbering Pattern</h6>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="configuration-section mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label fw-semibold">Starting Floor Number</label>
+                            <input type="number" class="form-control" 
+                                   @bind="PatternConfig.StartFloorNumber" 
+                                   @bind:after="OnConfigChanged"
+                                   min="0" max="100" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label fw-semibold">Unit Name Digits / Columns</label>
+                            <input type="number" class="form-control" 
+                                   @bind="PatternConfig.UnitNameDigits" 
+                                   @bind:after="OnDigitCountChanged"
+                                   min="0" max="10" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label fw-semibold">Apply To</label>
+                            <select class="form-select" @bind="PatternConfig.ApplyTo" @bind:after="OnConfigChanged">
+                                <option value="All">All Buildings</option>
+                                @foreach (var building in AvailableBuildings)
+                                {
+                                    <option value="@building">@building</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pattern Rows Section -->
+    <div class="pattern-rows-section mt-4">
+        <div class="card">
+            <div class="card-header bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 text-primary">
+                        <i class="fas fa-list-ol me-2"></i>Pattern Rows
+                        @if (PatternConfig.PatternRows.Any())
+                        {
+                            <span class="badge bg-primary ms-2">@PatternConfig.PatternRows.Count</span>
+                        }
+                    </h6>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="AddPatternRow" title="Add New Pattern Row">
+                            <i class="fas fa-plus"></i> Add Row
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CloneLastRow" 
+                                disabled="@(!PatternConfig.PatternRows.Any())" title="Clone Last Row">
+                            <i class="fas fa-copy"></i> Clone
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                @if (PatternConfig.PatternRows.Any())
+                {
+                    <div class="pattern-rows-list">
+                        @for (int index = 0; index < PatternConfig.PatternRows.Count; index++)
+                        {
+                            var currentIndex = index;
+                            <div class="pattern-row-wrapper mb-3 p-3 border rounded bg-light">
+                                <div class="row-header mb-2">
+                                    <small class="text-muted fw-bold">Row #@(currentIndex + 1)</small>
+                                </div>
+                                <DynamicPatternRow Row="PatternConfig.PatternRows[currentIndex]"
+                                                 RowChanged="(row) => OnPatternRowChanged(currentIndex, row)"
+                                                 OnDelete="() => OnDeletePatternRow(currentIndex)"
+                                                 UnitTypes="UnitTypes"
+                                                 UsedUnitTypes="GetUsedUnitTypes(currentIndex)"
+                                                 DigitCount="PatternConfig.UnitNameDigits" />
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-plus-circle fa-2x mb-2"></i>
+                        <p class="mb-0">No pattern rows yet. Click "Add Row" to create your first pattern.</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Messages Removed -->
+
+    <!-- Generate Button -->
+    <div class="generate-section mt-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted">
+                <small>Configure patterns above, then generate units for all buildings.</small>
+            </div>
+            <button type="button" class="btn btn-success" 
+                    @onclick="GenerateUnits" 
+                    disabled="@(!PatternConfig.PatternRows.Any() || !AvailableBuildings.Any())">
+                <i class="fas fa-magic"></i> Generate Units
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public UnitNumberPatternConfig PatternConfig { get; set; } = new();
+    [Parameter] public EventCallback<UnitNumberPatternConfig> PatternConfigChanged { get; set; }
+    [Parameter] public EventCallback<UnitNumberPatternConfig> OnUnitsGenerated { get; set; }
+    [Parameter] public List<string> UnitTypes { get; set; } = new();
+    [Parameter] public List<string> AvailableBuildings { get; set; } = new();
+
+    // Validation removed for cleaner UX
+
+    private async Task OnConfigChanged()
+    {
+        await PatternConfigChanged.InvokeAsync(PatternConfig);
+    }
+    
+    private async Task OnDigitCountChanged()
+    {
+        // Only trigger a state change - existing rows should remain unchanged
+        // New rows added after this will use the new digit count
+        await PatternConfigChanged.InvokeAsync(PatternConfig);
+    }
+
+    private async Task AddPatternRow()
+    {
+        // Allow adding rows regardless of digit count
+        var digitCount = PatternConfig.UnitNameDigits > 0 ? PatternConfig.UnitNameDigits : 1;
+        
+        var newRow = new UnitNameDisplay
+        {
+            UnitType = UnitTypes.FirstOrDefault() ?? ""
+        };
+        
+        // Initialize with dynamic digits
+        newRow.InitializeDigits(digitCount);
+        
+        PatternConfig.PatternRows.Add(newRow);
+        UpdateRowResult(newRow);
+        
+        await PatternConfigChanged.InvokeAsync(PatternConfig);
+    }
+
+    private async Task CloneLastRow()
+    {
+        if (PatternConfig.PatternRows.Any())
+        {
+            var lastRow = PatternConfig.PatternRows.Last();
+            var clonedRow = new UnitNameDisplay
+            {
+                UnitType = lastRow.UnitType,
+                Result = lastRow.Result
+            };
+            
+            // Clone with the same digit count as the original row
+            var digitCount = lastRow.OriginalDigitCount > 0 ? lastRow.OriginalDigitCount : lastRow.Digits.Count;
+            clonedRow.InitializeDigits(digitCount);
+            
+            for (int i = 0; i < digitCount; i++)
+            {
+                clonedRow.SetDigit(i, lastRow.GetDigit(i));
+                clonedRow.SetCustomDigit(i, lastRow.GetCustomDigit(i));
+            }
+            
+            PatternConfig.PatternRows.Add(clonedRow);
+            UpdateRowResult(clonedRow);
+            await PatternConfigChanged.InvokeAsync(PatternConfig);
+        }
+    }
+
+    private async Task OnPatternRowChanged(int index, UnitNameDisplay row)
+    {
+        try
+        {
+            if (index >= 0 && index < PatternConfig.PatternRows.Count)
+            {
+                PatternConfig.PatternRows[index] = row;
+                UpdateRowResult(row);
+                await PatternConfigChanged.InvokeAsync(PatternConfig);
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnPatternRowChanged: {ex.Message}");
+        }
+    }
+
+    private async Task OnDeletePatternRow(int index)
+    {
+        if (index >= 0 && index < PatternConfig.PatternRows.Count)
+        {
+            PatternConfig.PatternRows.RemoveAt(index);
+            await PatternConfigChanged.InvokeAsync(PatternConfig);
+        }
+    }
+
+    private void UpdateRowResult(UnitNameDisplay row)
+    {
+        // Always start with empty result
+        row.Result = "";
+        
+        // Check if Unit Type is selected
+        if (string.IsNullOrEmpty(row.UnitType))
+        {
+            return;
+        }
+        
+        // Process each digit based on the row's original digit count
+        var digitCount = row.OriginalDigitCount > 0 ? row.OriginalDigitCount : Math.Max(row.Digits.Count, 1);
+        
+        // Build preview progressively - show partial results as user selects dropdowns
+        var result = "";
+        bool hasAnySelection = false;
+        
+        for (int i = 0; i < digitCount; i++)
+        {
+            var digit = row.GetDigit(i);
+            
+            if (!string.IsNullOrEmpty(digit))
+            {
+                hasAnySelection = true;
+                
+                if (digit == "Floor No.")
+                {
+                    // Use the user's starting floor number for preview
+                    var floorValue = PatternConfig.StartFloorNumber > 0 ? PatternConfig.StartFloorNumber.ToString() : "1";
+                    result += floorValue;
+                }
+                else if (digit == "Unit No.")
+                {
+                    // Use a realistic unit number for preview
+                    result += "01";
+                }
+                else if (digit == "Custom")
+                {
+                    var customValue = row.GetCustomDigit(i);
+                    if (!string.IsNullOrEmpty(customValue))
+                    {
+                        result += customValue;
+                    }
+                    else
+                    {
+                        // Show placeholder for empty custom value
+                        result += "?";
+                    }
+                }
+                else if (digit == " ")
+                {
+                    result += " ";
+                }
+                else
+                {
+                    // Direct values like "/", "-", "0", "1", etc.
+                    result += digit;
+                }
+            }
+            else
+            {
+                // Show placeholder for unselected dropdown
+                result += "?";
+            }
+        }
+        
+        // Only show result if user has made at least one selection
+        if (hasAnySelection && !string.IsNullOrEmpty(result))
+        {
+            row.Result = result;
+        }
+    }
+
+    private string GenerateRealisticPreview(string baseResult, string unitType)
+    {
+        // If no specific configuration, show the base result
+        if (string.IsNullOrEmpty(baseResult))
+            return "Configure digits above";
+            
+        // Generate a realistic preview based on the pattern
+        var preview = baseResult;
+        
+        // If the result looks like it needs more realistic data, enhance it
+        if (preview.Contains("X") || preview == "01" || preview.Length < 3)
+        {
+            // Create a more realistic preview based on common patterns
+            var floorNum = PatternConfig.StartFloorNumber > 0 ? PatternConfig.StartFloorNumber : 2;
+            var unitNum = "01";
+            var suffix = !string.IsNullOrEmpty(unitType) && unitType.Length >= 1 ? 
+                        unitType.Substring(0, Math.Min(2, unitType.Length)).ToUpper() : "AB";
+            
+            // Generate preview based on common patterns
+            if (preview.Contains("X"))
+            {
+                preview = preview.Replace("X", suffix);
+            }
+            else if (preview.Length <= 2)
+            {
+                preview = $"{floorNum}{unitNum}{suffix}";
+            }
+        }
+        
+        return preview;
+    }
+
+    private List<string> GetUsedUnitTypes(int excludeIndex)
+    {
+        var usedTypes = new List<string>();
+        
+        for (int i = 0; i < PatternConfig.PatternRows.Count; i++)
+        {
+            if (i != excludeIndex && !string.IsNullOrEmpty(PatternConfig.PatternRows[i].UnitType))
+            {
+                usedTypes.Add(PatternConfig.PatternRows[i].UnitType);
+            }
+        }
+        
+        return usedTypes;
+    }
+    
+    private bool IsRowComplete(UnitNameDisplay row)
+    {
+        // Check if Unit Type is selected
+        if (string.IsNullOrEmpty(row.UnitType))
+            return false;
+        
+        // Check if result has no placeholders (? characters)
+        if (string.IsNullOrEmpty(row.Result) || row.Result.Contains("?"))
+            return false;
+        
+        // Check if all digits are properly configured
+        var digitCount = row.OriginalDigitCount > 0 ? row.OriginalDigitCount : Math.Max(row.Digits.Count, 1);
+        
+        for (int i = 0; i < digitCount; i++)
+        {
+            var digit = row.GetDigit(i);
+            if (string.IsNullOrEmpty(digit))
+                return false;
+            
+            // If digit is "Custom", check if custom value is provided
+            if (digit == "Custom")
+            {
+                var customValue = row.GetCustomDigit(i);
+                if (string.IsNullOrEmpty(customValue))
+                    return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    private async Task GenerateUnits()
+    {
+        // Generate units without validation - let the parent handle any business logic
+        await OnUnitsGenerated.InvokeAsync(PatternConfig);
+    }
+    
+    // Validation methods removed for cleaner UX
+
+    // Helper class for pattern configuration
+    public class UnitNumberPatternConfig
+    {
+        public int StartFloorNumber { get; set; } = 1;
+        public int UnitNameDigits { get; set; } = 3;
+        public string ApplyTo { get; set; } = "All";
+        public List<UnitNameDisplay> PatternRows { get; set; } = new();
+    }
+}
+
+<style>
+    .numbering-pattern-builder {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        background-color: #fff;
+    }
+
+    .configuration-section {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+    }
+
+    .pattern-rows-section {
+        background-color: #fff;
+    }
+
+    .pattern-rows-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .pattern-row-wrapper {
+        transition: all 0.2s ease;
+        border: 2px solid #e9ecef !important;
+    }
+    
+    .pattern-row-wrapper:hover {
+        border-color: #007bff !important;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+    }
+    
+    .row-header {
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+    
+    .result-preview {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        min-height: 2.5rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .generate-section {
+        padding: 15px;
+        background-color: #f0f8ff;
+        border-radius: 6px;
+        border: 1px solid #b3d9ff;
+    }
+    
+    .custom-input {
+        max-width: 120px;
+        font-weight: bold;
+        text-align: center;
+        border: 2px solid #ffc107;
+        background-color: #fff8e1;
+    }
+    
+    .custom-input:focus {
+        border-color: #ff9800;
+        box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25);
+    }
+    
+    .digit-dropdown {
+        font-size: 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        transition: all 0.15s ease-in-out;
+    }
+    
+    .digit-dropdown:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .digit-dropdown option {
+        padding: 8px 12px;
+        font-size: 0.875rem;
+        background-color: #fff;
+        color: #212529;
+    }
+    
+    .digit-dropdown option:hover {
+        background-color: #f8f9fa;
+    }
+</style>

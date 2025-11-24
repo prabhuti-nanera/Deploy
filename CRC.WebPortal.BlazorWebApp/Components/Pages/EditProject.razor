@@ -1,0 +1,500 @@
+@page "/projects/edit/{ProjectId:int}"
+@layout CRC.WebPortal.BlazorWebApp.Layout.MainLayout
+@using Microsoft.AspNetCore.Components.Authorization
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.BlazorWebApp.Services
+@using CRC.WebPortal.BlazorWebApp.Components.UnitTypes
+@using CRC.WebPortal.BlazorWebApp.Components.UnitNumbering
+@using CRC.WebPortal.Shared.Dtos
+@inject HttpClient HttpClient
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Edit Project - CRC WebPortal</PageTitle>
+
+<div class="container-fluid p-4" style="background-color: #f8f9fa; min-height: 100vh;">
+    <AuthorizeView>
+        <Authorized>
+
+            @if (isLoading)
+            {
+                <div class="text-center mt-5">
+                    <div class="spinner-border text-primary"></div>
+                    <div>Loading project...</div>
+                </div>
+            }
+            else if (errorMessage != null)
+            {
+                <div class="alert alert-danger mt-4">@errorMessage</div>
+                <button class="btn btn-primary" @onclick="GoHome">Go Home</button>
+            }
+            else if (project == null)
+            {
+                <div class="alert alert-warning">Project not found.</div>
+                <button class="btn btn-primary" @onclick="GoHome">Go Home</button>
+            }
+            else
+            {
+                <!-- Header Section -->
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center mb-3" 
+                         style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%;">
+                        <i class="fas fa-edit text-white" style="font-size: 2rem;"></i>
+                    </div>
+                    <h2 class="text-primary fw-bold mb-2">Edit Project</h2>
+                    <p class="text-muted">Modify your project settings, buildings and unit configurations</p>
+                </div>
+                
+                <form @onsubmit="HandleSubmit" @onsubmit:preventDefault="true">
+                    <!-- Project Information -->
+                    <div class="card mb-4 shadow border-0" style="border-radius: 15px;">
+                        <div class="card-header d-flex align-items-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px 15px 0 0; border: none;">
+                            <span class="text-white me-2">📋</span>
+                            <h5 class="mb-0 text-white">Project Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- First Row: Project Name, Type, Address, Admin -->
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Project Name</label>
+                                        <input type="text" class="form-control" @bind="project.Name" placeholder="Project name" />
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Type</label>
+                                        <select class="form-select" @bind="project.Type">
+                                            <option value="">Select type</option>
+                                            <option value="Res">Residential</option>
+                                            <option value="Com">Commercial</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Address</label>
+                                        <input type="text" class="form-control" @bind="project.Address" placeholder="Project address" />
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Admin Name</label>
+                                        <input type="text" class="form-control" @bind="project.AdminName" placeholder="Admin name" />
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Second Row: Contact -->
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Contact Number</label>
+                                        <input type="tel" class="form-control" @bind="project.AdminMobile" placeholder="Contact number" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Unit Management Section -->
+                    <div class="card mb-4 shadow border-0" style="border-radius: 15px;">
+                        <div class="card-header d-flex align-items-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px 15px 0 0; border: none;">
+                            <span class="text-white me-2">🏗️</span>
+                            <h5 class="mb-0 text-white">Unit Management</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <CRC.WebPortal.BlazorWebApp.Components.UnitNumbering.UnitNumberingPattern 
+                                UnitTypes="@UnitTypes"
+                                Buildings="@project.Buildings"
+                                NumberingPattern="@project.NumberingPattern"
+                                UnitTypesChanged="@OnUnitTypesChanged"
+                                BuildingsChanged="@OnBuildingsChanged"
+                                NumberingPatternChanged="@OnPatternConfigChanged"
+                                ProjectId="@ProjectId"
+                                GeneratedUnits="@GeneratedUnits"
+                                GeneratedUnitsChanged="@OnUnitsChanged" />
+                        </div>
+                    </div>
+
+                    <!-- Submit Section -->
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="GoHome">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-success" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <text>Updating</text>
+                            }
+                            else
+                            {
+                                <i class="fas fa-save me-2"></i>
+                                <text>Update Project</text>
+                            }
+                        </button>
+                    </div>
+                </form>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5>Please sign in to edit projects</h5>
+                            <button class="btn btn-primary mt-3" @onclick="GoToSignIn">Sign In</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    [Parameter]
+    public int ProjectId { get; set; }
+
+    private Models.CreateProjectRequest project = new();
+    private int projectId;
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string? errorMessage = null;
+    
+    // Unit Management Properties
+    private List<string> UnitTypes = new();
+    private List<CRC.WebPortal.Shared.Dtos.UnitDto> GeneratedUnits = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProject();
+    }
+
+    private async Task LoadProject()
+    {
+        try
+        {
+            var response = await HttpClient.GetFromJsonAsync<BaseResponse<CRC.WebPortal.Shared.Dtos.ProjectDto>>($"api/project/{ProjectId}");
+            
+            if (response?.Succeeded == true && response.Data != null)
+            {
+                var projectData = response.Data;
+                projectId = projectData.Id;
+                
+                project = new Models.CreateProjectRequest
+                {
+                    Name = projectData.Name,
+                    Address = projectData.Address,
+                    Type = projectData.Type,
+                    AdminName = projectData.AdminName,
+                    AdminMobile = projectData.AdminMobile,
+                    Buildings = projectData.Buildings?.Select(b => new Models.CreateBuildingRequest
+                    {
+                        Name = b.Name,
+                        Type = b.Type,
+                        Floors = b.Floors,
+                        UnitsPerFloor = b.UnitsPerFloor
+                    }).ToList() ?? new List<Models.CreateBuildingRequest>(),
+                    NumberingPattern = new Models.UnitNumberingPattern()
+                };
+                
+                // Load unit types from saved project
+                if (projectData.UnitTypes?.Any() == true)
+                {
+                    UnitTypes = projectData.UnitTypes.Select(ut => ut.Name).ToList();
+                }
+                
+                // Load generated units from saved project
+                if (projectData.GeneratedUnits?.Any() == true)
+                {
+                    GeneratedUnits = projectData.GeneratedUnits.ToList();
+                }
+                
+                // Load numbering pattern from saved project
+                if (projectData.NumberingPattern != null)
+                {
+                    project.NumberingPattern = new Models.UnitNumberingPattern
+                    {
+                        StartFloorNumber = projectData.NumberingPattern.StartFloorNumber,
+                        UnitNameDigits = projectData.NumberingPattern.UnitNameDigits,
+                        ApplyTo = projectData.NumberingPattern.ApplyTo,
+                        UnitNameDisplays = projectData.NumberingPattern.PatternRows?.Select(pr => 
+                        {
+                            var display = new Models.UnitNameDisplay
+                            {
+                                UnitType = pr.UnitType,
+                                Type = pr.UnitType,
+                                Result = pr.Result,
+                                // Legacy properties for backward compatibility
+                                FirstDigit = pr.FirstDigit,
+                                SecondDigit = pr.SecondDigit,
+                                ThirdDigit = pr.ThirdDigit,
+                                CustomFirstDigit = pr.CustomFirstDigit,
+                                CustomSecondDigit = pr.CustomSecondDigit,
+                                CustomThirdDigit = pr.CustomThirdDigit
+                            };
+                            
+                            // Initialize dynamic digits system
+                            var digitCount = projectData.NumberingPattern.UnitNameDigits > 0 ? 
+                                projectData.NumberingPattern.UnitNameDigits : 3;
+                            display.InitializeDigits(digitCount);
+                            
+                            // Convert legacy digits to dynamic system
+                            if (!string.IsNullOrEmpty(pr.FirstDigit))
+                                display.SetDigit(0, pr.FirstDigit);
+                            if (!string.IsNullOrEmpty(pr.SecondDigit))
+                                display.SetDigit(1, pr.SecondDigit);
+                            if (!string.IsNullOrEmpty(pr.ThirdDigit))
+                                display.SetDigit(2, pr.ThirdDigit);
+                                
+                            // Convert legacy custom digits
+                            if (!string.IsNullOrEmpty(pr.CustomFirstDigit))
+                                display.SetCustomDigit(0, pr.CustomFirstDigit);
+                            if (!string.IsNullOrEmpty(pr.CustomSecondDigit))
+                                display.SetCustomDigit(1, pr.CustomSecondDigit);
+                            if (!string.IsNullOrEmpty(pr.CustomThirdDigit))
+                                display.SetCustomDigit(2, pr.CustomThirdDigit);
+                            
+                            return display;
+                        }).ToList() ?? new List<Models.UnitNameDisplay>()
+                    };
+                }
+                
+                // Initialize with empty building if none exist
+                if (!project.Buildings.Any())
+                {
+                    project.Buildings.Add(new Models.CreateBuildingRequest
+                    {
+                        Name = "",
+                        Type = "Residential",
+                        Floors = 0,
+                        UnitsPerFloor = 0
+                    });
+                }
+                
+                // Initialize numbering pattern if none exists
+                if (project.NumberingPattern == null)
+                {
+                    project.NumberingPattern = new Models.UnitNumberingPattern();
+                }
+                
+                // Initialize pattern displays if empty
+                if (!project.NumberingPattern.UnitNameDisplays.Any())
+                {
+                    project.NumberingPattern.UnitNameDisplays.Add(new Models.UnitNameDisplay());
+                }
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to load project";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load project: {ex.Message}";
+        }
+        isLoading = false;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (isSubmitting) return;
+        
+        try
+        {
+            isSubmitting = true;
+            // Validate required fields with toaster notifications
+            if (!await ValidateProject())
+            {
+                isSubmitting = false;
+                return;
+            }
+            
+            // Convert to UpdateProjectRequest for API call
+            var updateRequest = new CRC.WebPortal.Shared.Requests.UpdateProjectRequest
+            {
+                Id = projectId,
+                Name = project.Name,
+                Address = project.Address,
+                Type = project.Type,
+                AdminName = project.AdminName,
+                AdminMobile = project.AdminMobile,
+                Buildings = project.Buildings?.Select(b => new CRC.WebPortal.Shared.Requests.UpdateBuildingRequest
+                {
+                    Name = b.Name,
+                    Type = b.Type,
+                    Floors = b.Floors,
+                    UnitsPerFloor = b.UnitsPerFloor
+                }).ToList() ?? new List<CRC.WebPortal.Shared.Requests.UpdateBuildingRequest>(),
+                UnitTypes = UnitTypes,
+                NumberingPattern = project.NumberingPattern != null ? new CRC.WebPortal.Shared.Requests.UpdateNumberingPatternRequest
+                {
+                    StartFloorNumber = project.NumberingPattern.StartFloorNumber,
+                    UnitNameDigits = project.NumberingPattern.UnitNameDigits,
+                    ApplyTo = project.NumberingPattern.ApplyTo,
+                    PatternRows = project.NumberingPattern.UnitNameDisplays?.Select(display => new CRC.WebPortal.Shared.Requests.UpdateNumberingPatternRowRequest
+                    {
+                        UnitType = display.UnitType,
+                        FirstDigit = display.FirstDigit,
+                        SecondDigit = display.SecondDigit,
+                        ThirdDigit = display.ThirdDigit,
+                        CustomFirstDigit = display.CustomFirstDigit,
+                        CustomSecondDigit = display.CustomSecondDigit,
+                        CustomThirdDigit = display.CustomThirdDigit,
+                        Result = display.Result,
+                        DigitsJson = display.ToDigitsJson(),
+                        CustomDigitsJson = display.ToCustomDigitsJson(),
+                        OriginalDigitCount = display.OriginalDigitCount
+                    }).ToList() ?? new List<CRC.WebPortal.Shared.Requests.UpdateNumberingPatternRowRequest>()
+                } : null,
+                GeneratedUnits = GeneratedUnits?.Select(unit => new CRC.WebPortal.Shared.Requests.GeneratedUnitRequest
+                {
+                    UnitNumber = unit.UnitNumber ?? string.Empty,
+                    UnitType = unit.UnitType ?? string.Empty,
+                    FloorNumber = unit.FloorNumber,
+                    BuildingName = unit.BuildingName,
+                    Position = unit.Position
+                }).ToList()
+            };
+            
+            var response = await HttpClient.PutAsJsonAsync($"api/project/{ProjectId}", updateRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<BaseResponse<CRC.WebPortal.Shared.Dtos.ProjectDto>>();
+                if (result?.Succeeded == true)
+                {
+                    await ToastService.ShowSuccessAsync($"Project '{project.Name}' updated successfully!");
+                    Navigation.NavigateTo("/home");
+                }
+                else
+                {
+                    await ToastService.ShowErrorAsync("Failed to update project: " + (result?.Message ?? "Unknown error"));
+                }
+            }
+            else
+            {
+                await ToastService.ShowErrorAsync("Failed to update project. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync("Error updating project: " + ex.Message);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task<bool> ValidateProject()
+    {
+        var hasError = false;
+
+        if (string.IsNullOrWhiteSpace(project.Name))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a project name.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.Type))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please select a project type.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.Address))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a project address.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.AdminName))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter an admin name.");
+        }
+
+        var mobile = project.AdminMobile?.Trim() ?? string.Empty;
+        var mobileValid = System.Text.RegularExpressions.Regex.IsMatch(mobile, "^\\+?\\d{10,15}$");
+        if (string.IsNullOrWhiteSpace(mobile) || !mobileValid)
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a valid mobile number.");
+        }
+
+        return !hasError;
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/home");
+    }
+
+    private void GoToSignIn()
+    {
+        Navigation.NavigateTo("/signin");
+    }
+    
+    // Unit Management Event Handlers
+    private void OnUnitTypesChanged(List<string> unitTypes)
+    {
+        try
+        {
+            UnitTypes = unitTypes;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnUnitTypesChanged: {ex.Message}");
+        }
+    }
+
+    private void OnBuildingsChanged(List<Models.CreateBuildingRequest> buildings)
+    {
+        try
+        {
+            project.Buildings = buildings;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnBuildingsChanged: {ex.Message}");
+        }
+    }
+
+    private void OnPatternConfigChanged(Models.UnitNumberingPattern pattern)
+    {
+        try
+        {
+            project.NumberingPattern = pattern;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnPatternConfigChanged: {ex.Message}");
+        }
+    }
+
+    private async Task OnUnitsChanged(List<CRC.WebPortal.Shared.Dtos.UnitDto> units)
+    {
+        try
+        {
+            GeneratedUnits = units;
+            
+            if (units.Any())
+            {
+                await ToastService.ShowInfoAsync($"Generated {units.Count} units. Remember to save the project to persist these units.");
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnUnitsChanged: {ex.Message}");
+        }
+    }
+}

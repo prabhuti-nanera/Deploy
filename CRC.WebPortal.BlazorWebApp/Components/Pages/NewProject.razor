@@ -1,0 +1,343 @@
+@page "/projects/new"
+@layout CRC.WebPortal.BlazorWebApp.Layout.MainLayout
+@using Microsoft.AspNetCore.Components.Authorization
+@using CRC.WebPortal.BlazorWebApp.Models
+@using CRC.WebPortal.BlazorWebApp.Services
+@using CRC.WebPortal.BlazorWebApp.Components.UnitTypes
+@using CRC.WebPortal.BlazorWebApp.Components.UnitNumbering
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@inject HttpClient HttpClient
+@inject IJSRuntime JSRuntime
+
+<PageTitle>New Project - CRC WebPortal</PageTitle>
+
+<div class="container-fluid p-4" style="background-color: #f8f9fa; min-height: 100vh;">
+    <AuthorizeView>
+        <Authorized>
+            <!-- Header Section -->
+            <div class="text-center mb-4">
+                <div class="d-inline-flex align-items-center justify-content-center mb-3" 
+                     style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%;">
+                    <i class="fas fa-building text-white" style="font-size: 2rem;"></i>
+                </div>
+                <h2 class="text-primary fw-bold mb-2">Create New Project</h2>
+                <p class="text-muted">Set up your project with buildings and unit configurations</p>
+            </div>
+            
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault="true">
+                <!-- Project Information -->
+                <div class="card mb-4 shadow border-0" style="border-radius: 15px;">
+                    <div class="card-header d-flex align-items-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px 15px 0 0; border: none;">
+                        <span class="text-white me-2">📋</span>
+                        <h5 class="mb-0 text-white">Project Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- First Row: Project Name, Type, Address, Admin -->
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Project Name</label>
+                                    <input type="text" class="form-control" @bind="project.Name" placeholder="Project name" />
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Type</label>
+                                    <select class="form-select" @bind="project.Type">
+                                        <option value="">Select type</option>
+                                        <option value="Res">Residential</option>
+                                        <option value="Com">Commercial</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Address</label>
+                                    <input type="text" class="form-control" @bind="project.Address" placeholder="Project address" />
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Admin</label>
+                                    <input type="text" class="form-control" @bind="project.AdminName" placeholder="Admin name" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Second Row: Contact -->
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Contact</label>
+                                    <input type="tel" class="form-control" @bind="project.AdminMobile" placeholder="Contact number" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Content: Balanced Left and Right Layout -->
+                <div class="row">
+                    <!-- Full Width for Unit Management -->
+                    <div class="col-12">
+                        <UnitNumberingPattern NumberingPattern="project.NumberingPattern"
+                                            NumberingPatternChanged="OnNumberingPatternChanged"
+                                            UnitTypes="project.UnitTypes"
+                                            UnitTypesChanged="OnUnitTypesChanged"
+                                            Buildings="project.Buildings"
+                                            BuildingsChanged="OnBuildingsChanged"
+                                            ProjectId="0"
+                                            GeneratedUnits="generatedUnits"
+                                            GeneratedUnitsChanged="OnGeneratedUnitsChanged" />
+                    </div>
+                </div>
+
+                <!-- Submit Section -->
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="GoBack">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Creating</text>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i>
+                            <text>Create Project</text>
+                        }
+                    </button>
+                </div>
+            </form>
+        </Authorized>
+        <NotAuthorized>
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5>Please sign in to create projects</h5>
+                            <button class="btn btn-primary mt-3" @onclick="GoToSignIn">Sign In</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@* Validation modal removed; using toaster notifications for simple messages *@
+
+@code {
+    private CreateProjectRequest project = new();
+    private bool isSubmitting = false;
+    private List<CRC.WebPortal.Shared.Dtos.UnitDto> generatedUnits = new();
+
+    protected override void OnInitialized()
+    {
+        project = new Models.CreateProjectRequest
+        {
+            Name = "",
+            Type = "Res",
+            Address = "",
+            AdminName = "",
+            AdminMobile = "",
+            Buildings = new List<Models.CreateBuildingRequest> { new Models.CreateBuildingRequest() },
+            UnitTypes = new List<string>()
+        };
+
+        // Start with one empty building for user to fill
+        if (!project.Buildings.Any())
+        {
+            project.Buildings.Add(new Models.CreateBuildingRequest
+            {
+                Name = "",
+                Type = "Residential",
+                Floors = 0,
+                UnitsPerFloor = 0
+            });
+        }
+
+        // Initialize numbering pattern
+        if (project.NumberingPattern == null)
+        {
+            project.NumberingPattern = new Models.UnitNumberingPattern();
+        }
+        
+        if (!project.NumberingPattern.UnitNameDisplays.Any())
+        {
+            project.NumberingPattern.UnitNameDisplays.Add(new UnitNameDisplay());
+        }
+    }
+
+    private Task OnNumberingPatternChanged(Models.UnitNumberingPattern pattern)
+    {
+        project.NumberingPattern = pattern;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnUnitTypesChanged(List<string> unitTypes)
+    {
+        project.UnitTypes = unitTypes;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnBuildingsChanged(List<Models.CreateBuildingRequest> buildings)
+    {
+        project.Buildings = buildings;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+
+    private async Task HandleSubmit()
+    {
+        if (isSubmitting) return;
+
+        isSubmitting = true;
+
+        try
+        {
+            if (await ValidateProject())
+            {
+                // Filter out empty buildings before sending
+                var projectToSend = new
+                {
+                    Name = project.Name,
+                    Type = project.Type,
+                    Address = project.Address,
+                    AdminName = project.AdminName,
+                    AdminMobile = project.AdminMobile,
+                    Buildings = project.Buildings.Where(b => !string.IsNullOrWhiteSpace(b.Name) && b.Floors > 0 && b.UnitsPerFloor > 0).ToList(),
+                    UnitTypes = project.UnitTypes.Select((name, index) => new CreateUnitTypeRequest
+                    {
+                        Name = name,
+                        Description = string.Empty,
+                        DisplayOrder = index
+                    }).ToList(),
+                    NumberingPattern = project.NumberingPattern != null ? new
+                    {
+                        StartFloorNumber = project.NumberingPattern.StartFloorNumber,
+                        UnitNameDigits = project.NumberingPattern.UnitNameDigits,
+                        ApplyTo = project.NumberingPattern.ApplyTo,
+                        PatternRows = project.NumberingPattern.UnitNameDisplays?.Select(display => new
+                        {
+                            UnitType = display.UnitType,
+                            FirstDigit = display.FirstDigit,
+                            SecondDigit = display.SecondDigit,
+                            ThirdDigit = display.ThirdDigit,
+                            CustomFirstDigit = display.CustomFirstDigit,
+                            CustomSecondDigit = display.CustomSecondDigit,
+                            CustomThirdDigit = display.CustomThirdDigit,
+                            Result = display.Result,
+                            Digits = display.Digits,
+                            CustomDigits = display.CustomDigits,
+                            OriginalDigitCount = display.OriginalDigitCount
+                        }).ToList()
+                    } : null,
+                    GeneratedUnits = generatedUnits.Select(unit => new
+                    {
+                        UnitNumber = unit.UnitNumber,
+                        UnitType = unit.UnitType,
+                        Floor = unit.FloorNumber,
+                        BuildingName = unit.BuildingName
+                    }).ToList()
+                };
+                
+                var response = await HttpClient.PostAsJsonAsync("/api/project", projectToSend);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    await ToastService.ShowSuccessAsync("🎉 Project created successfully!");
+                    Navigation.NavigateTo("/home");
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await ToastService.ShowErrorAsync($"❌ Failed to create project: {errorContent}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await ToastService.ShowErrorAsync($"❌ Error creating project: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task<bool> ValidateProject()
+    {
+        var hasError = false;
+
+        if (string.IsNullOrWhiteSpace(project.Name))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a project name.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.Type))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please select a project type.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.Address))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a project address.");
+        }
+
+        if (string.IsNullOrWhiteSpace(project.AdminName))
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter an admin name.");
+        }
+
+        // Simple mobile validation: digits with optional +, length 10-15
+        var mobile = project.AdminMobile?.Trim() ?? string.Empty;
+        var mobileValid = System.Text.RegularExpressions.Regex.IsMatch(mobile, "^\\+?\\d{10,15}$");
+        if (string.IsNullOrWhiteSpace(mobile) || !mobileValid)
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please enter a valid mobile number.");
+        }
+
+        var validBuildings = project.Buildings.Where(b => !string.IsNullOrWhiteSpace(b.Name) && b.Floors > 0 && b.UnitsPerFloor > 0).ToList();
+        if (!validBuildings.Any())
+        {
+            hasError = true;
+            await ToastService.ShowWarningAsync("Please add at least one valid building.");
+        }
+
+        return !hasError;
+    }
+
+    // Validation error method removed - using toaster notifications instead
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/home");
+    }
+
+    private void GoToSignIn()
+    {
+        Navigation.NavigateTo("/signin");
+    }
+
+    // Modal close method removed
+
+    private Task OnGeneratedUnitsChanged(List<CRC.WebPortal.Shared.Dtos.UnitDto> units)
+    {
+        generatedUnits = units;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+}

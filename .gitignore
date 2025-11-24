@@ -1,0 +1,6 @@
+# Ignore Visual Studio cache
+.vs/
+
+# Optional: ignore other common build folders
+bin/
+obj/
