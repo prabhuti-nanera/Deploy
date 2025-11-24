@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "HelloWorldWebApp": {
+    "AzureFrontendWebApp": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {
